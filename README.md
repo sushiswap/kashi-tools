@@ -1,5 +1,15 @@
-# TypeScript Foundation
+# Kashi toll for findong insolvent borrowers
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+## Installation
 
-Use this template when you want to publish a package which will be consumed by a Node 12.x runtime.
+- Clone the repo
+- Sign up at https://etherscan.io/apis, copy the key to env variable ETHERSCAN_API_KEY. A free account is enough
+- Sign up at https://auth.alchemyapi.io/signup, copy the key to env variable ALCHEMY_API_KEY. A free account is enough
+- yarn
+
+## Launching
+
+yarn find-insolvent-ether
+## Licence
+
+UNLICENCED
