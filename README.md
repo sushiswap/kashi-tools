@@ -1,4 +1,4 @@
-# Kashi tool for finding insolvent borrowers
+# A Tool for finding insolvent borrowers in Kashi
 
 ## Installation
 
