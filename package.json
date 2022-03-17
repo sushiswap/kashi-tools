@@ -9,7 +9,9 @@
   "license": "MIT",
   "scripts": {
     "prepublish": "tsc",
-    "test": "jest"
+    "test": "jest",
+    "find-insolvent-ether": "tsc && node ./dist/getKashiPairsInfo.js",
+    "debug": "tsc && node --inspect-brk ./dist/getKashiPairsInfo.js"
   },
   "lint-staged": {
     "**/*.ts": [
@@ -23,6 +25,7 @@
     "@commitlint/cli": "^11.0.0",
     "@commitlint/config-conventional": "^11.0.0",
     "@types/jest": "^26.0.20",
+    "@types/node": "^17.0.21",
     "@typescript-eslint/eslint-plugin": "^4.15.1",
     "@typescript-eslint/parser": "^4.15.1",
     "eslint": "^7.20.0",
@@ -34,7 +37,13 @@
     "ts-jest": "^26.5.1",
     "typescript": "^4.1.5"
   },
+  "dependencies": {
+    "@alch/alchemy-web3": "^1.1.9",
+    "@ethersproject/bignumber": "^5.5.0",
+    "node-fetch-commonjs": "^3.1.1",
+    "web3": "^1.6.1"
+  },
   "engines": {
-    "node": "12.x"
+    "node": "14.x"
   }
 }

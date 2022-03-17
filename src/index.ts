@@ -1,2 +1,2 @@
 // Export
-export { hello } from "./hello";
+export { getAllKashiPairsBentoV1 } from "./getKashiPairsInfo";
