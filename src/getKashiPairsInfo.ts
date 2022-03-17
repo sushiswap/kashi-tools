@@ -129,16 +129,15 @@ async function getPairDataFromBentoV1Log(network: Network, log: Log): Promise<Pa
     })
     const borrowersSet = new Set<string>(borrowLogs.map(b => '0x' + b.topics[1].slice(26)))
     const borrowers = [...borrowersSet]
-    const notSolventBorrowers = await getNotSolventBorrowersBentoV1(network, address, borrowers) 
     
     const pairData = await network.web3.eth.abi.decodeParameters(['address', 'address', 'address', 'bytes'], logParsed.data)
     const collateral = pairData[0] as string
     const collateralSymbol = await getTokenSymbol(network, collateral)
     const asset = pairData[1] as string
     const assetSymbol = await getTokenSymbol(network, asset)
-
-    //console.log(collateralSymbol, assetSymbol, notSolventBorrowers);
     
+    console.log(`Checking pair ${collateralSymbol} -> ${assetSymbol} (${borrowers.length} borrowers`)    
+    const notSolventBorrowers = await getNotSolventBorrowersBentoV1(network, address, borrowers)    
 
     return {
         address,
@@ -159,12 +158,10 @@ export async function getAllKashiPairsBentoV1(network: Network): Promise<PairDat
         address1: network.kashPairMasterAddress
     })
 
-    const pairs = await Promise.all(logs.map(l => getPairDataFromBentoV1Log(network, l)))    
-    //console.log(JSON.stringify(pairs, undefined, '\t')) 
+    const pairs = await Promise.all(logs.map(l => getPairDataFromBentoV1Log(network, l)))
     return pairs
 }
 
-// TODO: get ABI 'official'
 const kashiPairABI: AbiItem[] = [{
     inputs: [],
     name: "exchangeRate",
@@ -225,23 +222,9 @@ const kashiPairABI: AbiItem[] = [{
     type: "function",
 }]
 
-// const BentoV1ABI = [{
-//     inputs: [{internalType: 'contract IERC20', name: '', type: 'address'}],
-//     name: "totals",
-//     outputs: [
-//         {internalType: 'uint128', name: 'elastic', type: 'uint128'},
-//         {internalType: 'uint128', name: 'base', type: 'uint128'}
-//     ],
-//     stateMutability: "view",
-//     type: "function"
-// }]
-
-// function toElastic(total, base: BigNumber) {
-//     if (total.base.eq(0)) return base
-//     return base.mul(total.elastic).div(total.base)
-// }
-
 async function getNotSolventBorrowersBentoV1(network: Network, kashiPair: string, borrowers: string[]) {
+    console.log();
+    
     if (borrowers.length === 0) return []
     const kashiPaircontractInstance = new network.web3.eth.Contract(kashiPairABI, kashiPair)
     const liquidated = []
@@ -263,68 +246,6 @@ async function getNotSolventBorrowersBentoV1(network: Network, kashiPair: string
     return liquidated
 }
 
-// const CLOSED_COLLATERIZATION_RATE = BigNumber.from(75000).mul(1e13); // 75%
-// const OPEN_COLLATERIZATION_RATE = BigNumber.from(77000).mul(1e13); // 77%
-// const E18 = BigNumber.from(1e9).mul(1e9);
-// async function _getNotSolventBorrowersBentoV1(network: Network, bentoTotals, kashiPair, borrowers, open) {
-//     if (borrowers.length === 0) return []
-
-//     const kashiPaircontractInstance = new network.web3.eth.Contract(kashiPairABI, kashiPair)
-//     const totalBorrow = await kashiPaircontractInstance.methods.totalBorrow().call()
-//     totalBorrow.elastic = BigNumber.from(totalBorrow.elastic)
-//     totalBorrow.base = BigNumber.from(totalBorrow.base)
-
-//     // apply accrue() changes
-//     const accrueInfo = await kashiPaircontractInstance.methods.accrueInfo().call()
-//     accrueInfo.interestPerSecond = BigNumber.from(accrueInfo.interestPerSecond)
-//     const blockNumber = await network.web3.eth.getBlockNumber()
-//     const timeStamp = (await network.web3.eth.getBlock(blockNumber)).timestamp
-//     const elapsedTime = timeStamp - accrueInfo.lastAccrued
-//     const extraAmount = totalBorrow.elastic.mul(accrueInfo.interestPerSecond).mul(elapsedTime).div(E18);
-//     totalBorrow.elastic = totalBorrow.elastic.add(extraAmount);
-    
-//     // updateExchangeRate
-//     const {_updated, rate} = await kashiPaircontractInstance.methods.updateExchangeRate().call()
-//     const exchangeRate = BigNumber.from(rate)
-    
-//     const res = await Promise.all(borrowers.map(async b => {
-//         const borrowPart = BigNumber.from(await kashiPaircontractInstance.methods.userBorrowPart(b).call())
-//         if (borrowPart.eq(0)) return true
-//         const collateralShare = BigNumber.from(await kashiPaircontractInstance.methods.userCollateralShare(b).call())
-//         if (collateralShare.eq(0)) return false
-//         const collateralUsed = collateralShare.mul(open ? OPEN_COLLATERIZATION_RATE : CLOSED_COLLATERIZATION_RATE)
-//         const collateralUsedAmount = toElastic(bentoTotals, collateralUsed)
-//         const borrowCostInCollateral = borrowPart.mul(totalBorrow.elastic).mul(exchangeRate).div(totalBorrow.base)
-//         // await kashiPaircontractInstance.methods.liquidate(
-//         //     [b], 
-//         //     [0], 
-//         //     '0x0000000000000000000000000000000000000000',
-//         //     '0x0000000000000000000000000000000000000000',
-//         //     true
-//         // ).call()
-//         return [collateralUsedAmount.toString(), borrowCostInCollateral.toString(), exchangeRate.toString()]
-//         //return collateralUsedAmount.gte(borrowCostInCollateral)
-//     }))
-//     console.log(res);
-// }
-
-getAllKashiPairsBentoV1(networks.Ethereum)
-
-// const abiCache = {}
-// async function getContractABI(network: Network, addr) {
-//     const abi = abiCache[addr]
-//     if (abi !== undefined)
-//         return abi
-
-//     const res = await fetchAPI(network, {
-//         module: 'contract',
-//         action: 'getabi',
-//         address: addr,
-//     })
-//     abiCache[addr] = res === undefined ? undefined : JSON.parse(res)
-//     return abiCache[addr]
-// }
-
 async function _getTokenSymbol(network: Network, token: string, ...args: unknown[]): Promise<string> {
     const abi: AbiItem[] = [{
         constant: true,
@@ -332,7 +253,6 @@ async function _getTokenSymbol(network: Network, token: string, ...args: unknown
         name: "symbol",
         outputs: [{name: '', type: 'string'}],
         payable: false,
-        //signature: "0x95d89b41",
         stateMutability: "view",
         type: "function",
     }]
@@ -342,3 +262,5 @@ async function _getTokenSymbol(network: Network, token: string, ...args: unknown
 }
 
 const getTokenSymbol = wrapPermCache(_getTokenSymbol, (_n: Network, t: string) => t)
+
+getAllKashiPairsBentoV1(networks.Ethereum)
