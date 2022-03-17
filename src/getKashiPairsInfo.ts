@@ -136,7 +136,7 @@ async function getPairDataFromBentoV1Log(network: Network, log: Log): Promise<Pa
     const asset = pairData[1] as string
     const assetSymbol = await getTokenSymbol(network, asset)
     
-    console.log(`Checking pair ${collateralSymbol} -> ${assetSymbol} (${borrowers.length} borrowers`)    
+    console.log(`Checking pair ${collateralSymbol} -> ${assetSymbol} (${borrowers.length} borrowers)`)    
     const notSolventBorrowers = await getNotSolventBorrowersBentoV1(network, address, borrowers)    
 
     return {
@@ -149,17 +149,6 @@ async function getPairDataFromBentoV1Log(network: Network, log: Log): Promise<Pa
         //oracleData: pairData[3],
         notSolventBorrowers
     }
-}
-
-export async function getAllKashiPairsBentoV1(network: Network): Promise<PairData[]> {
-    const logs = await getLogs(networks.Ethereum, {
-        address: network.bentoBoxV1Address,
-        event: 'LogDeploy(address,bytes,address)',
-        address1: network.kashPairMasterAddress
-    })
-
-    const pairs = await Promise.all(logs.map(l => getPairDataFromBentoV1Log(network, l)))
-    return pairs
 }
 
 const kashiPairABI: AbiItem[] = [{
@@ -223,8 +212,6 @@ const kashiPairABI: AbiItem[] = [{
 }]
 
 async function getNotSolventBorrowersBentoV1(network: Network, kashiPair: string, borrowers: string[]) {
-    console.log();
-    
     if (borrowers.length === 0) return []
     const kashiPaircontractInstance = new network.web3.eth.Contract(kashiPairABI, kashiPair)
     const liquidated = []
@@ -262,5 +249,20 @@ async function _getTokenSymbol(network: Network, token: string, ...args: unknown
 }
 
 const getTokenSymbol = wrapPermCache(_getTokenSymbol, (_n: Network, t: string) => t)
+
+export async function getAllKashiPairsBentoV1(network: Network): Promise<PairData[]> {
+    const logs = await getLogs(networks.Ethereum, {
+        address: network.bentoBoxV1Address,
+        event: 'LogDeploy(address,bytes,address)',
+        address1: network.kashPairMasterAddress
+    })
+
+    const pairs = await Promise.all(logs.map(l => getPairDataFromBentoV1Log(network, l)))
+    let totalForLiquidation = 0
+    pairs.forEach(p => totalForLiquidation += p.notSolventBorrowers.length)
+    console.log(`Total number of insolvent borrowers: ${totalForLiquidation}`)   
+     
+    return pairs
+}
 
 getAllKashiPairsBentoV1(networks.Ethereum)
