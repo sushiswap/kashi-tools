@@ -1,4 +1,4 @@
-# Kashi toll for findong insolvent borrowers
+# Kashi tool for finding insolvent borrowers
 
 ## Installation
 
