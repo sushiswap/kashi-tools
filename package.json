@@ -10,7 +10,8 @@
   "scripts": {
     "prepublish": "tsc",
     "test": "jest",
-    "find-insolvent-ether": "tsc && node ./dist/getKashiPairsInfo.js",
+    "find-insolvent-ether": "tsc && node ./dist/findInsolventEther.js",
+    "find-insolvent-polygon": "tsc && node ./dist/findInsolventPolygon.js",
     "debug": "tsc && node --inspect-brk ./dist/getKashiPairsInfo.js"
   },
   "lint-staged": {

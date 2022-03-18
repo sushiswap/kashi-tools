@@ -1,34 +1,7 @@
 import fetch, {Response} from 'node-fetch-commonjs'
-//import { BigNumber } from '@ethersproject/bignumber'
-import {getTrottle} from './trottle'
-import {wrapPermCache} from './permanentCache.js'
-import { createAlchemyWeb3 } from "@alch/alchemy-web3"
+import {Network} from './networks'
+import {wrapPermCache} from './permanentCache'
 import {AbiItem} from "web3-utils"
-
-const networks = {
-    Ethereum: {
-        name: 'Ethereum',
-        ticker: 'E',
-        coinName: 'ETH',
-        web3: createAlchemyWeb3(`https://eth-mainnet.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`),
-        scanAPIURL: 'https://api.etherscan.io',
-        scanAPIKey: process.env.ETHERSCAN_API_KEY,
-        trottle: getTrottle(4, 1100),     // no more than 4 request per 1.1 second
-        bentoBoxV1Address: '0xF5BCE5077908a1b7370B9ae04AdC565EBd643966',
-        kashPairMasterAddress: '0x2cBA6Ab6574646Badc84F0544d05059e57a5dc42'
-    },
-    // Polygon: {
-    //     name: 'Polygon',
-    //     ticker: 'P',
-    //     coinName: 'MATIC',
-    //     web3: createAlchemyWeb3(`https://polygon-mainnet.g.alchemy.com/v2/${keys.AlchemyWeb3}`),
-    //     scanAPIURL: 'https://api.polygonscan.com',
-    //     scanAPIKey: keys.PolygonscanAPI,
-    //     trottle: getTrottle(4, 1100),     // no more than 4 request per 1.1 second
-    // },
-}
-
-type Network = typeof networks.Ethereum
 
 async function fetchAPI(network: Network, search: Record<string, string>) {
     const params = Object.entries(search).map(([k, v]) => `${k}=${v}`).join('&')
@@ -98,6 +71,7 @@ interface PairData {
     assetSymbol: string;
     oracle: string;
     //oracleData: string;
+    borrowers: string[];
     notSolventBorrowers: string[];
 }
 
@@ -123,7 +97,7 @@ async function getPairDataFromBentoV1Log(network: Network, log: Log): Promise<Pa
     );
     const address = logParsed.cloneAddress
 
-    const borrowLogs = await getLogs(networks.Ethereum, {
+    const borrowLogs = await getLogs(network, {
         address,
         event: 'LogBorrow(address,address,uint256,uint256,uint256)'
     })
@@ -147,6 +121,7 @@ async function getPairDataFromBentoV1Log(network: Network, log: Log): Promise<Pa
         assetSymbol,
         oracle: pairData[2],
         //oracleData: pairData[3],
+        borrowers,
         notSolventBorrowers
     }
 }
@@ -233,7 +208,7 @@ async function getNotSolventBorrowersBentoV1(network: Network, kashiPair: string
     return liquidated
 }
 
-async function _getTokenSymbol(network: Network, token: string, ...args: unknown[]): Promise<string> {
+async function _getTokenSymbol(network: Network, token: string): Promise<string> {
     const abi: AbiItem[] = [{
         constant: true,
         inputs: [],
@@ -244,14 +219,14 @@ async function _getTokenSymbol(network: Network, token: string, ...args: unknown
         type: "function",
     }]
     const contractInstance = new network.web3.eth.Contract(abi, token)
-    const result = await contractInstance.methods.symbol(args.slice(3)).call() as string
+    const result = await contractInstance.methods.symbol().call() as string
     return result
 }
 
 const getTokenSymbol = wrapPermCache(_getTokenSymbol, (_n: Network, t: string) => t)
 
 export async function getAllKashiPairsBentoV1(network: Network): Promise<PairData[]> {
-    const logs = await getLogs(networks.Ethereum, {
+    const logs = await getLogs(network, {
         address: network.bentoBoxV1Address,
         event: 'LogDeploy(address,bytes,address)',
         address1: network.kashPairMasterAddress
@@ -259,10 +234,14 @@ export async function getAllKashiPairsBentoV1(network: Network): Promise<PairDat
 
     const pairs = await Promise.all(logs.map(l => getPairDataFromBentoV1Log(network, l)))
     let totalForLiquidation = 0
-    pairs.forEach(p => totalForLiquidation += p.notSolventBorrowers.length)
+    let totalBorrowers = 0
+    pairs.forEach(p => {
+        totalForLiquidation += p.notSolventBorrowers.length
+        totalBorrowers += p.borrowers.length
+    })
+    console.log(`Total number of pairs: ${pairs.length}`)   
+    console.log(`Total number of borrowers: ${totalBorrowers}`)   
     console.log(`Total number of insolvent borrowers: ${totalForLiquidation}`)   
-     
+
     return pairs
 }
-
-getAllKashiPairsBentoV1(networks.Ethereum)
