@@ -13,6 +13,17 @@ export const networks = {
         bentoBoxV1Address: '0xF5BCE5077908a1b7370B9ae04AdC565EBd643966',
         kashPairMasterAddress: '0x2cBA6Ab6574646Badc84F0544d05059e57a5dc42'
     },
+    Kovan: {
+        name: 'Kovan',
+        ticker: 'K',
+        coinName: 'ETH',
+        web3: createAlchemyWeb3(`https://eth-kovan.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`),
+        scanAPIURL: 'https://api-kovan.etherscan.io',
+        scanAPIKey: process.env.ETHERSCAN_API_KEY,
+        trottle: getTrottle(4, 1100),     // no more than 4 request per 1.1 second
+        bentoBoxV1Address: '0xc381a85ed7C7448Da073b7d6C9d4cBf1Cbf576f0',
+        kashPairMasterAddress: '0x2cBA6Ab6574646Badc84F0544d05059e57a5dc42'
+    },
     Polygon: {
         name: 'Polygon',
         ticker: 'P',
