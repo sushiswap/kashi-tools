@@ -3,7 +3,7 @@ import {Network} from './networks'
 import {wrapPermCache} from './permanentCache'
 import {AbiItem} from "web3-utils"
 
-async function fetchAPI(network: Network, search: Record<string, string>) {
+async function fetchAPI(network: Network, search: Record<string, string|number>) {
     const params = Object.entries(search).map(([k, v]) => `${k}=${v}`).join('&')
     for(;;) {
         await network.trottle()
@@ -16,6 +16,7 @@ async function fetchAPI(network: Network, search: Record<string, string>) {
         const result = await response.json() as Record<string, unknown>
         if (result.status === '1') return result.result
         if (result.status === '0' && result.message == 'No records found') return result.result
+        if (result.status === '0' && result.message == 'No transactions found') return result.result
         if (result.result == 'Max rate limit reached') continue     // try till success
         console.error(`${network.name} Scan API error: ${result.message} ${result.result}`);
         console.error(`${network.scanAPIURL}/api?${params}&apikey=${network.scanAPIKey}`)
@@ -63,6 +64,24 @@ async function getLogs(network: Network, params: LogParams) {
     return logs
 }
 
+interface Transaction {
+    isError? : string,
+    input?: string
+}
+
+async function getAddrTransactions(network: Network, address: string, startblock = 0) {
+    const txs =  await fetchAPI(network, {
+        module: 'account',
+        action: 'txlist',
+        address,
+        startblock,
+        endblock: 'latest',
+        sort: 'asc'
+    }) as Transaction[]
+    if (txs === undefined) return []
+    return txs.filter(tx => tx.isError === undefined || tx.isError === '0')
+}
+
 interface PairData {
     address: string;
     collateral: string;
@@ -73,7 +92,11 @@ interface PairData {
     //oracleData: string;
     borrowers: string[];
     notSolventBorrowers: string[];
+    liquidateTxs: Transaction[];
 }
+
+// network.web3.utils.keccak256('liquidate(address[],uint256[],address,address,bool)').substring(0, 10);
+const liquidateMethodId = '0x76ee101b'
 
 async function getPairDataFromBentoV1Log(network: Network, log: Log): Promise<PairData> {
     const logParsed = await network.web3.eth.abi.decodeLog([{
@@ -111,7 +134,11 @@ async function getPairDataFromBentoV1Log(network: Network, log: Log): Promise<Pa
     const assetSymbol = await getTokenSymbol(network, asset)
     
     console.log(`Checking pair ${collateralSymbol} -> ${assetSymbol} (${borrowers.length} borrowers)`)    
-    const notSolventBorrowers = await getNotSolventBorrowersBentoV1(network, address, borrowers)    
+
+    const txsAll = await getAddrTransactions(network, address)
+    const liquidateTxs = txsAll.filter(t => t.input?.startsWith(liquidateMethodId))
+
+    const notSolventBorrowers = await getNotSolventBorrowersBentoV1(network, address, borrowers)
 
     return {
         address,
@@ -122,7 +149,8 @@ async function getPairDataFromBentoV1Log(network: Network, log: Log): Promise<Pa
         oracle: pairData[2],
         //oracleData: pairData[3],
         borrowers,
-        notSolventBorrowers
+        notSolventBorrowers,
+        liquidateTxs
     }
 }
 
@@ -235,13 +263,16 @@ export async function getAllKashiPairsBentoV1(network: Network): Promise<PairDat
     const pairs = await Promise.all(logs.map(l => getPairDataFromBentoV1Log(network, l)))
     let totalForLiquidation = 0
     let totalBorrowers = 0
+    let totalLiquidates = 0
     pairs.forEach(p => {
         totalForLiquidation += p.notSolventBorrowers.length
         totalBorrowers += p.borrowers.length
+        totalLiquidates += p.liquidateTxs.length
     })
     console.log(`Total number of pairs: ${pairs.length}`)   
     console.log(`Total number of borrowers: ${totalBorrowers}`)   
     console.log(`Total number of insolvent borrowers: ${totalForLiquidation}`)   
+    console.log(`Total number of liquidations: ${totalLiquidates}`)   
 
     return pairs
 }
