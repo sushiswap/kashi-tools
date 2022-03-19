@@ -276,6 +276,8 @@ export async function getAllKashiPairsBentoV1(network: Network): Promise<PairDat
             else liquidators.set(t.from, prev+1)
         })
     })
+
+    console.log(`Kashi liquidation statistics for ${network.name}`)    
     console.log(`Total number of pairs: ${pairs.length}`)   
     console.log(`Total number of borrowers: ${totalBorrowers}`)   
     console.log(`Total number of insolvent borrowers: ${totalForLiquidation}`)   
