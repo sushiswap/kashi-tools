@@ -65,8 +65,10 @@ async function getLogs(network: Network, params: LogParams) {
 }
 
 interface Transaction {
+    from: string,
+    to: string,
+    input?: string,
     isError? : string,
-    input?: string
 }
 
 async function getAddrTransactions(network: Network, address: string, startblock = 0) {
@@ -137,7 +139,6 @@ async function getPairDataFromBentoV1Log(network: Network, log: Log): Promise<Pa
 
     const txsAll = await getAddrTransactions(network, address)
     const liquidateTxs = txsAll.filter(t => t.input?.startsWith(liquidateMethodId))
-
     const notSolventBorrowers = await getNotSolventBorrowersBentoV1(network, address, borrowers)
 
     return {
@@ -264,15 +265,23 @@ export async function getAllKashiPairsBentoV1(network: Network): Promise<PairDat
     let totalForLiquidation = 0
     let totalBorrowers = 0
     let totalLiquidates = 0
+    const liquidators = new Map<string, number>()
     pairs.forEach(p => {
         totalForLiquidation += p.notSolventBorrowers.length
         totalBorrowers += p.borrowers.length
         totalLiquidates += p.liquidateTxs.length
+        p.liquidateTxs.forEach(t => {
+            const prev = liquidators.get(t.from)
+            if (prev === undefined) liquidators.set(t.from, 1)
+            else liquidators.set(t.from, prev+1)
+        })
     })
     console.log(`Total number of pairs: ${pairs.length}`)   
     console.log(`Total number of borrowers: ${totalBorrowers}`)   
     console.log(`Total number of insolvent borrowers: ${totalForLiquidation}`)   
-    console.log(`Total number of liquidations: ${totalLiquidates}`)   
+    console.log(`Total number of liquidations: ${totalLiquidates}`)
+    console.log('Liquidators:');
+    liquidators.forEach((num, from) => console.log(`    ${from} - ${num}`))    
 
     return pairs
 }
