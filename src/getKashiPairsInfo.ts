@@ -100,7 +100,7 @@ interface PairData {
 // network.web3.utils.keccak256('liquidate(address[],uint256[],address,address,bool)').substring(0, 10);
 const liquidateMethodId = '0x76ee101b'
 
-async function getPairDataFromBentoV1Log(network: Network, log: Log): Promise<PairData> {
+async function getPairData(network: Network, log: Log): Promise<PairData> {
     const logParsed = await network.web3.eth.abi.decodeLog([{
             type: 'string',
             name: 'LogName',
@@ -261,7 +261,7 @@ export async function getAllKashiPairsBentoV1(network: Network): Promise<PairDat
         address1: network.kashPairMasterAddress
     })
 
-    const pairs = await Promise.all(logs.map(l => getPairDataFromBentoV1Log(network, l)))
+    const pairs = await Promise.all(logs.map(l => getPairData(network, l)))
     let totalForLiquidation = 0
     let totalBorrowers = 0
     let totalLiquidates = 0
