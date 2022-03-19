@@ -1,4 +1,4 @@
-# A Tool for finding insolvent borrowers in Kashi
+# A Tool to calculate Kashi liquidation statistics
 
 ## Supported networks
 - Ethereum
@@ -14,9 +14,9 @@
 - yarn
 
 ## Launching
-- Ethereum: yarn find-insolvent-ether
-- Kovan: yarn find-insolvent-kovan
-- Polygon: yarn find-insolvent-polygon
+- Ethereum: yarn kashi-liquidation-statistics-ether
+- Kovan: yarn kashi-liquidation-statistics-kovan
+- Polygon: yarn kashi-liquidation-statistics-polygon
 ## Licence
 
 UNLICENCED
