@@ -2,6 +2,7 @@ import fetch, {Response} from 'node-fetch-commonjs'
 import {Network} from './networks'
 import {wrapPermCache} from './permanentCache'
 import {AbiItem} from "web3-utils"
+import { BigNumber } from '@ethersproject/bignumber'
 
 async function fetchAPI(network: Network, search: Record<string, string|number>) {
     const params = Object.entries(search).map(([k, v]) => `${k}=${v}`).join('&')
@@ -84,6 +85,14 @@ async function getAddrTransactions(network: Network, address: string, startblock
     return txs.filter(tx => tx.isError === undefined || tx.isError === '0')
 }
 
+interface InSolventBorrower {
+    address: string,
+    collateralShare: number,
+    collateralAmount: number,
+    borrowAmount: number,
+    borrowCostInCollateral: number,
+    coverage: number
+}
 interface PairData {
     address: string;
     collateral: string;
@@ -93,7 +102,7 @@ interface PairData {
     oracle: string;
     //oracleData: string;
     borrowers: string[];
-    notSolventBorrowers: string[];
+    inSolventBorrowers?: InSolventBorrower[];
     liquidateTxs: Transaction[];
 }
 
@@ -129,28 +138,29 @@ async function getPairData(network: Network, log: Log): Promise<PairData> {
     const borrowersSet = new Set<string>(borrowLogs.map(b => '0x' + b.topics[1].slice(26)))
     const borrowers = [...borrowersSet]
     
-    const pairData = await network.web3.eth.abi.decodeParameters(['address', 'address', 'address', 'bytes'], logParsed.data)
-    const collateral = pairData[0] as string
+    const pairInfo = await network.web3.eth.abi.decodeParameters(['address', 'address', 'address', 'bytes'], logParsed.data)
+    const collateral = pairInfo[0] as string
     const collateralSymbol = await getTokenSymbol(network, collateral)
-    const asset = pairData[1] as string
+    const asset = pairInfo[1] as string
     const assetSymbol = await getTokenSymbol(network, asset)
 
     const txsAll = await getAddrTransactions(network, address)
     const liquidateTxs = txsAll.filter(t => t.input?.startsWith(liquidateMethodId))
-    const notSolventBorrowers = await getNotSolventBorrowersBentoV1(network, address, collateralSymbol, assetSymbol, borrowers)
 
-    return {
+    const pairData: PairData = {
         address,
         collateral,
         collateralSymbol,
         asset,
         assetSymbol,
-        oracle: pairData[2],
+        oracle: pairInfo[2],
         //oracleData: pairData[3],
         borrowers,
-        notSolventBorrowers,
         liquidateTxs
     }
+    pairData.inSolventBorrowers = await getInSolventBorrowersBentoV1(network, pairData)
+
+    return pairData
 }
 
 const kashiPairABI: AbiItem[] = [{
@@ -213,29 +223,108 @@ const kashiPairABI: AbiItem[] = [{
     type: "function",
 }]
 
-async function getNotSolventBorrowersBentoV1(network: Network, kashiPair: string, collateral: string, asset: string, borrowers: string[]) {
-    console.log(`Checking pair ${collateral} -> ${asset} (${borrowers.length} borrowers)`) 
-    if (borrowers.length === 0) return []
-    const kashiPaircontractInstance = new network.web3.eth.Contract(kashiPairABI, kashiPair)
-    const liquidated = []
-    for (let i = 0; i < borrowers.length; ++i) {
+const BentoV1ABI: AbiItem[] = [{
+    inputs: [{internalType: 'contract IERC20', name: '', type: 'address'}],
+    name: "totals",
+    outputs: [
+        {internalType: 'uint128', name: 'elastic', type: 'uint128'},
+        {internalType: 'uint128', name: 'base', type: 'uint128'}
+    ],
+    stateMutability: "view",
+    type: "function"
+}]
+
+interface Rebase {
+    base: BigNumber,
+    elastic: BigNumber
+}
+
+function toElastic(total: Rebase, base: BigNumber) {
+    if (total.base.eq(0)) return base
+    return base.mul(total.elastic).div(total.base)
+}
+
+async function getInSolventBorrowersBentoV1(network: Network, kashiPair: PairData): Promise<InSolventBorrower[]> {
+    console.log(
+        `Checking pair ${kashiPair.collateralSymbol} -> ${kashiPair.assetSymbol} (${kashiPair.borrowers.length} borrowers)`
+    ) 
+    if (kashiPair.borrowers.length === 0) return []
+    const kashiPaircontractInstance = new network.web3.eth.Contract(kashiPairABI, kashiPair.address)
+    const inSolvent = []
+    for (let i = 0; i < kashiPair.borrowers.length; ++i) {
         try {
             await kashiPaircontractInstance.methods.liquidate(
-                [borrowers[i]], 
+                [kashiPair.borrowers[i]], 
                 [34444], 
                 '0x0000000000000000000000000000000000000001',
                 '0x0000000000000000000000000000000000000000',
                 true
             ).call({
-                from: kashiPair
+                from: kashiPair.address
             })
         } catch(e) {
             continue
         }
-        liquidated.push(borrowers[i])
-        console.log(`Can be liquidated: ${collateral}->${asset} user=${borrowers[i]}`);        
+        inSolvent.push(kashiPair.borrowers[i])
+        console.log(
+            `Can be liquidated: ${kashiPair.collateralSymbol}->${kashiPair.assetSymbol} user=${kashiPair.borrowers[i]}`
+        );        
     }
-    return liquidated
+    const inSolventData = await getBorrowerInfo(network, kashiPair, inSolvent)
+    return inSolventData
+}
+
+const E18 = BigNumber.from(1e9).mul(1e9);
+async function getBorrowerInfo(network: Network, kashiPair: PairData, inSolvent: string[]): Promise<InSolventBorrower[]> {
+    if (inSolvent.length === 0) return []
+
+    const bentoContractInstance = new network.web3.eth.Contract(BentoV1ABI, network.bentoBoxV1Address)
+    const bentoTotals = await bentoContractInstance.methods.totals(kashiPair.collateral).call()
+    bentoTotals.elastic = BigNumber.from(bentoTotals.elastic)
+    bentoTotals.base = BigNumber.from(bentoTotals.base)
+
+    const kashiPaircontractInstance = new network.web3.eth.Contract(kashiPairABI, kashiPair.address)
+    const totalBorrow = await kashiPaircontractInstance.methods.totalBorrow().call()
+    totalBorrow.elastic = BigNumber.from(totalBorrow.elastic)
+    totalBorrow.base = BigNumber.from(totalBorrow.base)
+
+    // apply accrue() changes
+    const accrueInfo = await kashiPaircontractInstance.methods.accrueInfo().call()
+    accrueInfo.interestPerSecond = BigNumber.from(accrueInfo.interestPerSecond)
+    const blockNumber = await network.web3.eth.getBlockNumber()
+    const timeStamp = (await network.web3.eth.getBlock(blockNumber)).timestamp as number
+    const elapsedTime = timeStamp - accrueInfo.lastAccrued
+    const extraAmount = totalBorrow.elastic.mul(accrueInfo.interestPerSecond).mul(elapsedTime).div(E18);
+    totalBorrow.elastic = totalBorrow.elastic.add(extraAmount);
+    
+    // updateExchangeRate
+    const { _updated, rate} = await kashiPaircontractInstance.methods.updateExchangeRate().call()
+    const exchangeRate = BigNumber.from(rate)
+    
+    const res: InSolventBorrower[] = await Promise.all(kashiPair.borrowers.map(async b => {
+        const borrowPart = BigNumber.from(await kashiPaircontractInstance.methods.userBorrowPart(b).call())
+        const collateralShare = BigNumber.from(await kashiPaircontractInstance.methods.userCollateralShare(b).call())
+        const collateralUsed = collateralShare.mul(E18)//open ? OPEN_COLLATERIZATION_RATE : CLOSED_COLLATERIZATION_RATE)
+        const collateralUsedAmount = toElastic(bentoTotals, collateralUsed)
+        const borrowCostInCollateral = parseFloat(
+            borrowPart.mul(totalBorrow.elastic).mul(exchangeRate).div(totalBorrow.base).toString()
+        )
+        const borrowAmount = parseFloat(
+            borrowPart.mul(totalBorrow.elastic).mul(E18).div(totalBorrow.base).toString()
+        )
+        const collateralAmount = parseFloat(collateralUsedAmount.toString())
+
+        return {
+            address: b,
+            collateralShare: parseFloat(collateralShare.toString()),
+            collateralAmount,
+            borrowAmount,
+            borrowCostInCollateral,
+            coverage: borrowCostInCollateral/collateralAmount*100
+        }
+    }))
+
+    return res
 }
 
 async function _getTokenSymbol(network: Network, token: string): Promise<string> {
@@ -268,7 +357,7 @@ export async function getAllKashiPairsBentoV1(network: Network): Promise<PairDat
     let totalLiquidates = 0
     const liquidators = new Map<string, number>()
     pairs.forEach(p => {
-        totalForLiquidation += p.notSolventBorrowers.length
+        totalForLiquidation += p.inSolventBorrowers ? p.inSolventBorrowers.length : 0
         totalBorrowers += p.borrowers.length
         totalLiquidates += p.liquidateTxs.length
         p.liquidateTxs.forEach(t => {
