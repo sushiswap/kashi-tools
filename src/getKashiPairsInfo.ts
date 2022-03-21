@@ -134,12 +134,10 @@ async function getPairData(network: Network, log: Log): Promise<PairData> {
     const collateralSymbol = await getTokenSymbol(network, collateral)
     const asset = pairData[1] as string
     const assetSymbol = await getTokenSymbol(network, asset)
-    
-    console.log(`Checking pair ${collateralSymbol} -> ${assetSymbol} (${borrowers.length} borrowers)`)    
 
     const txsAll = await getAddrTransactions(network, address)
     const liquidateTxs = txsAll.filter(t => t.input?.startsWith(liquidateMethodId))
-    const notSolventBorrowers = await getNotSolventBorrowersBentoV1(network, address, borrowers)
+    const notSolventBorrowers = await getNotSolventBorrowersBentoV1(network, address, collateralSymbol, assetSymbol, borrowers)
 
     return {
         address,
@@ -215,7 +213,8 @@ const kashiPairABI: AbiItem[] = [{
     type: "function",
 }]
 
-async function getNotSolventBorrowersBentoV1(network: Network, kashiPair: string, borrowers: string[]) {
+async function getNotSolventBorrowersBentoV1(network: Network, kashiPair: string, collateral: string, asset: string, borrowers: string[]) {
+    console.log(`Checking pair ${collateral} -> ${asset} (${borrowers.length} borrowers)`) 
     if (borrowers.length === 0) return []
     const kashiPaircontractInstance = new network.web3.eth.Contract(kashiPairABI, kashiPair)
     const liquidated = []
@@ -223,16 +222,18 @@ async function getNotSolventBorrowersBentoV1(network: Network, kashiPair: string
         try {
             await kashiPaircontractInstance.methods.liquidate(
                 [borrowers[i]], 
-                [0], 
-                '0x0000000000000000000000000000000000000000',
+                [34444], 
+                '0x0000000000000000000000000000000000000001',
                 '0x0000000000000000000000000000000000000000',
                 true
-            ).call()
+            ).call({
+                from: kashiPair
+            })
         } catch(e) {
             continue
         }
         liquidated.push(borrowers[i])
-        console.log("Liquidation: ", kashiPair, borrowers[i]);        
+        console.log(`Can be liquidated: ${collateral}->${asset} user=${borrowers[i]}`);        
     }
     return liquidated
 }
