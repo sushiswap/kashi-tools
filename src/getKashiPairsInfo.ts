@@ -247,14 +247,15 @@ function toElastic(total: Rebase, base: BigNumber) {
 async function getInSolventBorrowersBentoV1(network: Network, kashiPair: PairData): Promise<InSolventBorrower[]> {
     console.log(
         `Checking pair ${kashiPair.collateralSymbol} -> ${kashiPair.assetSymbol} (${kashiPair.borrowers.length} borrowers)`
-    ) 
+    )
+    
     if (kashiPair.borrowers.length === 0) return []
     const kashiPaircontractInstance = new network.web3.eth.Contract(kashiPairABI, kashiPair.address)
-    const inSolvent = []
-    for (let i = 0; i < kashiPair.borrowers.length; ++i) {
+    const inSolvent: string[] = []
+    await Promise.all(kashiPair.borrowers.map(async b => {
         try {
             await kashiPaircontractInstance.methods.liquidate(
-                [kashiPair.borrowers[i]], 
+                [b], 
                 [34444], 
                 '0x0000000000000000000000000000000000000001',
                 '0x0000000000000000000000000000000000000000',
@@ -263,14 +264,16 @@ async function getInSolventBorrowersBentoV1(network: Network, kashiPair: PairDat
                 from: kashiPair.address
             })
         } catch(e) {
-            continue
+            return
         }
-        inSolvent.push(kashiPair.borrowers[i])
-        console.log(
-            `Can be liquidated: ${kashiPair.collateralSymbol}->${kashiPair.assetSymbol} user=${kashiPair.borrowers[i]}`
-        );        
-    }
+        inSolvent.push(b)            
+    }))
     const inSolventData = await getBorrowerInfo(network, kashiPair, inSolvent)
+    inSolventData.forEach(b => {
+        console.log(
+            `    Can be liquidated: user=${b.address}, coverage=${Math.round(b.coverage)}%`
+        );    
+    })
     return inSolventData
 }
 
@@ -301,7 +304,7 @@ async function getBorrowerInfo(network: Network, kashiPair: PairData, inSolvent:
     const { _updated, rate} = await kashiPaircontractInstance.methods.updateExchangeRate().call()
     const exchangeRate = BigNumber.from(rate)
     
-    const res: InSolventBorrower[] = await Promise.all(kashiPair.borrowers.map(async b => {
+    const res: InSolventBorrower[] = await Promise.all(inSolvent.map(async b => {
         const borrowPart = BigNumber.from(await kashiPaircontractInstance.methods.userBorrowPart(b).call())
         const collateralShare = BigNumber.from(await kashiPaircontractInstance.methods.userCollateralShare(b).call())
         const collateralUsed = collateralShare.mul(E18)//open ? OPEN_COLLATERIZATION_RATE : CLOSED_COLLATERIZATION_RATE)
@@ -351,7 +354,11 @@ export async function getAllKashiPairsBentoV1(network: Network): Promise<PairDat
         address1: network.kashPairMasterAddress
     })
 
-    const pairs = await Promise.all(logs.map(l => getPairData(network, l)))
+    const pairs = []
+    for (let i = 0; i < logs.length; ++i) {
+        pairs[i] = await getPairData(network, logs[i])
+    }
+
     let totalForLiquidation = 0
     let totalBorrowers = 0
     let totalLiquidates = 0
