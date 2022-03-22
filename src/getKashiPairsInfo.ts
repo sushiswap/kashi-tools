@@ -244,6 +244,14 @@ function toElastic(total: Rebase, base: BigNumber) {
     return base.mul(total.elastic).div(total.base)
 }
 
+function numberPrecision(n: number, precision: number) {
+    if (n == 0) return 0
+    const digits = Math.ceil(Math.log10(n))
+    if (digits >= precision) return Math.round(n)
+    const shift = Math.pow(10, precision - digits)
+    return Math.round(n*shift)/shift
+}
+
 async function getInSolventBorrowersBentoV1(network: Network, kashiPair: PairData): Promise<InSolventBorrower[]> {
     console.log(
         `Checking pair ${kashiPair.collateralSymbol} -> ${kashiPair.assetSymbol} (${kashiPair.borrowers.length} borrowers)`
@@ -269,9 +277,13 @@ async function getInSolventBorrowersBentoV1(network: Network, kashiPair: PairDat
         inSolvent.push(b)            
     }))
     const inSolventData = await getBorrowerInfo(network, kashiPair, inSolvent)
+
+    const assetDecimals = await getTokenDecimals(network, kashiPair.asset)
+    const del = Math.pow(10, assetDecimals)
     inSolventData.forEach(b => {
         console.log(
-            `    Can be liquidated: user=${b.address}, coverage=${Math.round(b.coverage)}%, borrowAmount=${b.borrowAmount}`
+            `    Can be liquidated: user=${b.address}, coverage=${Math.round(b.coverage)}%, `
+            + `borrowAmount=${numberPrecision(b.borrowAmount/del, 3)}${kashiPair.assetSymbol}`
         );    
     })
     return inSolventData
@@ -346,6 +358,23 @@ async function _getTokenSymbol(network: Network, token: string): Promise<string>
 }
 
 const getTokenSymbol = wrapPermCache(_getTokenSymbol, (_n: Network, t: string) => t)
+
+async function _getTokenDecimals(network: Network, token: string): Promise<number> {
+    const abi: AbiItem[] = [{
+        constant: true,
+        inputs: [],
+        name: "decimals",
+        outputs: [{name: '', type: 'uint8'}],
+        payable: false,
+        stateMutability: "view",
+        type: "function",
+    }]
+    const contractInstance = new network.web3.eth.Contract(abi, token)
+    const result = await contractInstance.methods.decimals().call() as number
+    return result
+}
+
+const getTokenDecimals = wrapPermCache(_getTokenDecimals, (_n: Network, t: string) => t)
 
 export async function getAllKashiPairsBentoV1(network: Network): Promise<PairData[]> {
     const logs = await getLogs(network, {
