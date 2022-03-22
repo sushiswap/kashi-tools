@@ -1,8 +1,8 @@
 import fetch, {Response} from 'node-fetch-commonjs'
 import {Network} from './networks'
-import {wrapPermCache} from './permanentCache'
 import {AbiItem} from "web3-utils"
 import { BigNumber } from '@ethersproject/bignumber'
+import { getToken, Token } from './token'
 
 async function fetchAPI(network: Network, search: Record<string, string|number>) {
     const params = Object.entries(search).map(([k, v]) => `${k}=${v}`).join('&')
@@ -95,10 +95,8 @@ interface InSolventBorrower {
 }
 interface PairData {
     address: string;
-    collateral: string;
-    collateralSymbol: string;
-    asset: string;
-    assetSymbol: string;
+    collateral: Token;
+    asset: Token;
     oracle: string;
     //oracleData: string;
     borrowers: string[];
@@ -139,10 +137,8 @@ async function getPairData(network: Network, log: Log): Promise<PairData> {
     const borrowers = [...borrowersSet]
     
     const pairInfo = await network.web3.eth.abi.decodeParameters(['address', 'address', 'address', 'bytes'], logParsed.data)
-    const collateral = pairInfo[0] as string
-    const collateralSymbol = await getTokenSymbol(network, collateral)
-    const asset = pairInfo[1] as string
-    const assetSymbol = await getTokenSymbol(network, asset)
+    const collateral = await getToken(network, pairInfo[0])
+    const asset = await getToken(network, pairInfo[1])
 
     const txsAll = borrowers.length > 0 ? await getAddrTransactions(network, address) : []
     const liquidateTxs = txsAll.filter(t => t.input?.startsWith(liquidateMethodId))
@@ -150,9 +146,7 @@ async function getPairData(network: Network, log: Log): Promise<PairData> {
     const pairData: PairData = {
         address,
         collateral,
-        collateralSymbol,
         asset,
-        assetSymbol,
         oracle: pairInfo[2],
         //oracleData: pairData[3],
         borrowers,
@@ -254,7 +248,8 @@ function numberPrecision(n: number, precision: number) {
 
 async function getInSolventBorrowersBentoV1(network: Network, kashiPair: PairData): Promise<InSolventBorrower[]> {
     console.log(
-        `Checking pair ${kashiPair.collateralSymbol} -> ${kashiPair.assetSymbol} (${kashiPair.borrowers.length} borrowers)`
+        `Checking pair ${kashiPair.collateral.symbol()} -> ${kashiPair.asset.symbol()} `
+        + `(${kashiPair.borrowers.length} borrowers)`
     )
     
     if (kashiPair.borrowers.length === 0) return []
@@ -278,12 +273,12 @@ async function getInSolventBorrowersBentoV1(network: Network, kashiPair: PairDat
     }))
     const inSolventData = await getBorrowerInfo(network, kashiPair, inSolvent)
 
-    const assetDecimals = await getTokenDecimals(network, kashiPair.asset)
+    const assetDecimals = kashiPair.asset.decimals()
     const del = Math.pow(10, assetDecimals)
     inSolventData.forEach(b => {
         console.log(
             `    Can be liquidated: user=${b.address}, coverage=${Math.round(b.coverage)}%, `
-            + `borrowAmount=${numberPrecision(b.borrowAmount/del, 3)}${kashiPair.assetSymbol}`
+            + `borrowAmount=${numberPrecision(b.borrowAmount/del, 3)}${kashiPair.asset.symbol()}`
         );    
     })
     return inSolventData
@@ -294,7 +289,7 @@ async function getBorrowerInfo(network: Network, kashiPair: PairData, inSolvent:
     if (inSolvent.length === 0) return []
 
     const bentoContractInstance = new network.web3.eth.Contract(BentoV1ABI, network.bentoBoxV1Address)
-    const bentoTotals = await bentoContractInstance.methods.totals(kashiPair.collateral).call()
+    const bentoTotals = await bentoContractInstance.methods.totals(kashiPair.collateral.address()).call()
     bentoTotals.elastic = BigNumber.from(bentoTotals.elastic)
     bentoTotals.base = BigNumber.from(bentoTotals.base)
 
@@ -341,40 +336,6 @@ async function getBorrowerInfo(network: Network, kashiPair: PairData, inSolvent:
 
     return res
 }
-
-async function _getTokenSymbol(network: Network, token: string): Promise<string> {
-    const abi: AbiItem[] = [{
-        constant: true,
-        inputs: [],
-        name: "symbol",
-        outputs: [{name: '', type: 'string'}],
-        payable: false,
-        stateMutability: "view",
-        type: "function",
-    }]
-    const contractInstance = new network.web3.eth.Contract(abi, token)
-    const result = await contractInstance.methods.symbol().call() as string
-    return result
-}
-
-const getTokenSymbol = wrapPermCache(_getTokenSymbol, (_n: Network, t: string) => t)
-
-async function _getTokenDecimals(network: Network, token: string): Promise<number> {
-    const abi: AbiItem[] = [{
-        constant: true,
-        inputs: [],
-        name: "decimals",
-        outputs: [{name: '', type: 'uint8'}],
-        payable: false,
-        stateMutability: "view",
-        type: "function",
-    }]
-    const contractInstance = new network.web3.eth.Contract(abi, token)
-    const result = await contractInstance.methods.decimals().call() as number
-    return result
-}
-
-const getTokenDecimals = wrapPermCache(_getTokenDecimals, (_n: Network, t: string) => t)
 
 export async function getAllKashiPairsBentoV1(network: Network): Promise<PairData[]> {
     const logs = await getLogs(network, {
