@@ -144,7 +144,7 @@ async function getPairData(network: Network, log: Log): Promise<PairData> {
     const asset = pairInfo[1] as string
     const assetSymbol = await getTokenSymbol(network, asset)
 
-    const txsAll = await getAddrTransactions(network, address)
+    const txsAll = borrowers.length > 0 ? await getAddrTransactions(network, address) : []
     const liquidateTxs = txsAll.filter(t => t.input?.startsWith(liquidateMethodId))
 
     const pairData: PairData = {
@@ -271,7 +271,7 @@ async function getInSolventBorrowersBentoV1(network: Network, kashiPair: PairDat
     const inSolventData = await getBorrowerInfo(network, kashiPair, inSolvent)
     inSolventData.forEach(b => {
         console.log(
-            `    Can be liquidated: user=${b.address}, coverage=${Math.round(b.coverage)}%`
+            `    Can be liquidated: user=${b.address}, coverage=${Math.round(b.coverage)}%, borrowAmount=${b.borrowAmount}`
         );    
     })
     return inSolventData
@@ -313,7 +313,7 @@ async function getBorrowerInfo(network: Network, kashiPair: PairData, inSolvent:
             borrowPart.mul(totalBorrow.elastic).mul(exchangeRate).div(totalBorrow.base).toString()
         )
         const borrowAmount = parseFloat(
-            borrowPart.mul(totalBorrow.elastic).mul(E18).div(totalBorrow.base).toString()
+            borrowPart.mul(totalBorrow.elastic).div(totalBorrow.base).toString()
         )
         const collateralAmount = parseFloat(collateralUsedAmount.toString())
 
