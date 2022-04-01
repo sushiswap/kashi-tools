@@ -3,6 +3,7 @@ import {Network} from './networks'
 import {AbiItem} from "web3-utils"
 import { BigNumber } from '@ethersproject/bignumber'
 import { getToken, Token } from './token'
+import { BentoBoxV1 } from './BentoBoxV1'
 
 async function fetchAPI(network: Network, search: Record<string, string|number>) {
     const params = Object.entries(search).map(([k, v]) => `${k}=${v}`).join('&')
@@ -228,16 +229,6 @@ const BentoV1ABI: AbiItem[] = [{
     type: "function"
 }]
 
-interface Rebase {
-    base: BigNumber,
-    elastic: BigNumber
-}
-
-function toElastic(total: Rebase, base: BigNumber) {
-    if (total.base.eq(0)) return base
-    return base.mul(total.elastic).div(total.base)
-}
-
 function numberPrecision(n: number, precision: number) {
     if (n == 0) return 0
     const digits = Math.ceil(Math.log10(n))
@@ -288,10 +279,7 @@ const E18 = BigNumber.from(1e9).mul(1e9);
 async function getBorrowerInfo(network: Network, kashiPair: PairData, inSolvent: string[]): Promise<InSolventBorrower[]> {
     if (inSolvent.length === 0) return []
 
-    const bentoContractInstance = new network.web3.eth.Contract(BentoV1ABI, network.bentoBoxV1Address)
-    const bentoTotals = await bentoContractInstance.methods.totals(kashiPair.collateral.address()).call()
-    bentoTotals.elastic = BigNumber.from(bentoTotals.elastic)
-    bentoTotals.base = BigNumber.from(bentoTotals.base)
+    const bento = new BentoBoxV1(network)
 
     const kashiPaircontractInstance = new network.web3.eth.Contract(kashiPairABI, kashiPair.address)
     const totalBorrow = await kashiPaircontractInstance.methods.totalBorrow().call()
@@ -315,7 +303,7 @@ async function getBorrowerInfo(network: Network, kashiPair: PairData, inSolvent:
         const borrowPart = BigNumber.from(await kashiPaircontractInstance.methods.userBorrowPart(b).call())
         const collateralShare = BigNumber.from(await kashiPaircontractInstance.methods.userCollateralShare(b).call())
         const collateralUsed = collateralShare.mul(E18)//open ? OPEN_COLLATERIZATION_RATE : CLOSED_COLLATERIZATION_RATE)
-        const collateralUsedAmount = toElastic(bentoTotals, collateralUsed)
+        const collateralUsedAmount = await bento.toAmount(kashiPair.collateral.address(), collateralUsed)
         const borrowCostInCollateral = parseFloat(
             borrowPart.mul(totalBorrow.elastic).mul(exchangeRate).div(totalBorrow.base).toString()
         )
