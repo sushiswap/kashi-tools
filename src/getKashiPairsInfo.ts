@@ -218,17 +218,6 @@ const kashiPairABI: AbiItem[] = [{
     type: "function",
 }]
 
-const BentoV1ABI: AbiItem[] = [{
-    inputs: [{internalType: 'contract IERC20', name: '', type: 'address'}],
-    name: "totals",
-    outputs: [
-        {internalType: 'uint128', name: 'elastic', type: 'uint128'},
-        {internalType: 'uint128', name: 'base', type: 'uint128'}
-    ],
-    stateMutability: "view",
-    type: "function"
-}]
-
 function numberPrecision(n: number, precision: number) {
     if (n == 0) return 0
     const digits = Math.ceil(Math.log10(n))
