@@ -1,32 +1,8 @@
 import { AbiItem } from "web3-utils"
 import { Contract } from "web3-eth-contract"
-import { BigNumber, BigNumberish } from "@ethersproject/bignumber";
+import { BigNumber } from "@ethersproject/bignumber";
 import { Network } from "./networks";
-
-class Rebase {
-    elastic: BigNumber
-    base: BigNumber
-
-    constructor(init: {elastic: BigNumberish, base: BigNumberish}) {
-        this.elastic = BigNumber.from(init.elastic)
-        this.base = BigNumber.from(init.base)
-    }
-
-    toBase(
-        elastic: BigNumber
-    ): BigNumber {
-        if (this.elastic.isZero()) return elastic
-        return elastic.mul(this.base).div(this.elastic)
-    }
-
-    toElastic(
-        base: BigNumber
-    ): BigNumber {
-        if (this.base.isZero()) return base
-        return base.mul(this.elastic).div(this.base)
-    }
-
-}
+import { Rebase } from "./Rebase";
 
 const BentoV1ABI: AbiItem[] = [{
     inputs: [{internalType: 'contract IERC20', name: '', type: 'address'}],
@@ -49,7 +25,7 @@ export class BentoBoxV1 {
     }
 
     async totals(token: string): Promise<Rebase> {
-        if (this._totals[token] == undefined) {
+        if (this._totals[token] === undefined) {
             const totals = await this._contractInstance.methods.totals(token).call()
             this._totals[token] = new Rebase(totals)
         }

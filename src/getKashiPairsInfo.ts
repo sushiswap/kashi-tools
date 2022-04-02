@@ -4,6 +4,7 @@ import {AbiItem} from "web3-utils"
 import { BigNumber } from '@ethersproject/bignumber'
 import { getToken, Token } from './token'
 import { BentoBoxV1 } from './BentoBoxV1'
+import { KashiPair } from './KashiPair'
 
 async function fetchAPI(network: Network, search: Record<string, string|number>) {
     const params = Object.entries(search).map(([k, v]) => `${k}=${v}`).join('&')
@@ -158,66 +159,6 @@ async function getPairData(network: Network, log: Log): Promise<PairData> {
     return pairData
 }
 
-const kashiPairABI: AbiItem[] = [{
-    inputs: [],
-    name: "exchangeRate",
-    outputs: [{internalType: 'uint256', name: '', type: 'uint256'}],
-    stateMutability: "view",
-    type: "function"
-}, {
-    inputs: [],
-    name: "totalBorrow",
-    outputs: [
-        {internalType: 'uint128', name: 'elastic', type: 'uint128'},
-        {internalType: 'uint128', name: 'base', type: 'uint128'}
-    ],
-    stateMutability: "view",
-    type: "function"
-}, {
-    inputs: [{internalType: 'address', name: '', type: 'address'}],
-    name: "userCollateralShare",
-    outputs: [{internalType: 'uint256', name: '', type: 'uint256'}],
-    stateMutability: "view",
-    type: "function"
-}, {
-    inputs: [{internalType: 'address', name: '', type: 'address'}],
-    name: "userBorrowPart",
-    outputs: [{internalType: 'uint256', name: '', type: 'uint256'}],
-    stateMutability: "view",
-    type: "function"
-}, {
-    inputs: [],
-    name: "updateExchangeRate",
-    outputs: [
-        {internalType: 'bool', name: 'updated', type: 'bool'},
-        {internalType: 'uint256', name: 'rate', type: 'uint256'}
-    ],
-    stateMutability: "nonpayable",
-    type: "function"
-}, {
-    inputs: [
-        {internalType: 'address[]', name: 'users', type: 'address[]'},
-        {internalType: 'uint256[]', name: 'maxBorrowParts', type: 'uint256[]'},
-        {internalType: 'address', name: 'to', type: 'address'},
-        {internalType: 'contract ISwapper', name: 'swapper', type: 'address'},
-        {internalType: 'bool', name: 'open', type: 'bool'},
-    ],
-    name: "liquidate",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function"
-}, {
-    inputs: [],
-    name: "accrueInfo",
-    outputs: [
-        {internalType: 'uint64', name: 'interestPerSecond', type: 'uint64'},
-        {internalType: 'uint64', name: 'lastAccrued', type: 'uint64'},
-        {internalType: 'uint128', name: 'feesEarnedFraction', type: 'uint128'},
-    ],
-    stateMutability: "view",
-    type: "function",
-}]
-
 function numberPrecision(n: number, precision: number) {
     if (n == 0) return 0
     const digits = Math.ceil(Math.log10(n))
@@ -233,25 +174,15 @@ async function getInSolventBorrowersBentoV1(network: Network, kashiPair: PairDat
     )
     
     if (kashiPair.borrowers.length === 0) return []
-    const kashiPaircontractInstance = new network.web3.eth.Contract(kashiPairABI, kashiPair.address)
+    const pair = new KashiPair(network, kashiPair.address)
     const inSolvent: string[] = []
     await Promise.all(kashiPair.borrowers.map(async b => {
-        try {
-            await kashiPaircontractInstance.methods.liquidate(
-                [b], 
-                [34444], 
-                '0x0000000000000000000000000000000000000001',
-                '0x0000000000000000000000000000000000000000',
-                true
-            ).call({
-                from: kashiPair.address
-            })
-        } catch(e) {
-            return
-        }
-        inSolvent.push(b)            
+        const canBeLiquidated = await pair.canBeLiquidated(b)
+        if (canBeLiquidated) inSolvent.push(b)         
     }))
-    const inSolventData = await getBorrowerInfo(network, kashiPair, inSolvent)
+    
+    const bento = new BentoBoxV1(network)
+    const inSolventData = await getBorrowerInfo(network, bento, pair, kashiPair, inSolvent)
 
     const assetDecimals = kashiPair.asset.decimals()
     const del = Math.pow(10, assetDecimals)
@@ -265,32 +196,19 @@ async function getInSolventBorrowersBentoV1(network: Network, kashiPair: PairDat
 }
 
 const E18 = BigNumber.from(1e9).mul(1e9);
-async function getBorrowerInfo(network: Network, kashiPair: PairData, inSolvent: string[]): Promise<InSolventBorrower[]> {
+async function getBorrowerInfo(
+    network: Network, 
+    bento: BentoBoxV1, 
+    pair: KashiPair, 
+    kashiPair: PairData, 
+    inSolvent: string[]
+): Promise<InSolventBorrower[]> {
     if (inSolvent.length === 0) return []
 
-    const bento = new BentoBoxV1(network)
-
-    const kashiPaircontractInstance = new network.web3.eth.Contract(kashiPairABI, kashiPair.address)
-    const totalBorrow = await kashiPaircontractInstance.methods.totalBorrow().call()
-    totalBorrow.elastic = BigNumber.from(totalBorrow.elastic)
-    totalBorrow.base = BigNumber.from(totalBorrow.base)
-
-    // apply accrue() changes
-    const accrueInfo = await kashiPaircontractInstance.methods.accrueInfo().call()
-    accrueInfo.interestPerSecond = BigNumber.from(accrueInfo.interestPerSecond)
-    const blockNumber = await network.web3.eth.getBlockNumber()
-    const timeStamp = (await network.web3.eth.getBlock(blockNumber)).timestamp as number
-    const elapsedTime = timeStamp - accrueInfo.lastAccrued
-    const extraAmount = totalBorrow.elastic.mul(accrueInfo.interestPerSecond).mul(elapsedTime).div(E18);
-    totalBorrow.elastic = totalBorrow.elastic.add(extraAmount);
-    
-    // updateExchangeRate
-    const { _updated, rate} = await kashiPaircontractInstance.methods.updateExchangeRate().call()
-    const exchangeRate = BigNumber.from(rate)
+    const [totalBorrow, exchangeRate] = await Promise.all([pair.accruedTotalBorrow(), pair.updateExchangeRate()])
     
     const res: InSolventBorrower[] = await Promise.all(inSolvent.map(async b => {
-        const borrowPart = BigNumber.from(await kashiPaircontractInstance.methods.userBorrowPart(b).call())
-        const collateralShare = BigNumber.from(await kashiPaircontractInstance.methods.userCollateralShare(b).call())
+        const [borrowPart, collateralShare] = await Promise.all([pair.userBorrowPart(b), pair.userCollateralShare(b)])
         const collateralUsed = collateralShare.mul(E18)//open ? OPEN_COLLATERIZATION_RATE : CLOSED_COLLATERIZATION_RATE)
         const collateralUsedAmount = await bento.toAmount(kashiPair.collateral.address(), collateralUsed)
         const borrowCostInCollateral = parseFloat(
