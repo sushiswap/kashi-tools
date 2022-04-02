@@ -131,18 +131,21 @@ async function getPairData(network: Network, log: Log): Promise<PairData> {
     );
     const address = logParsed.cloneAddress
 
-    const borrowLogs = await getLogs(network, {
-        address,
-        event: 'LogBorrow(address,address,uint256,uint256,uint256)'
-    })
+    const [borrowLogs, pairInfo] = await Promise.all([
+        getLogs(network, {
+            address,
+            event: 'LogBorrow(address,address,uint256,uint256,uint256)'
+        }),
+        network.web3.eth.abi.decodeParameters(['address', 'address', 'address', 'bytes'], logParsed.data)
+    ])
     const borrowersSet = new Set<string>(borrowLogs.map(b => '0x' + b.topics[1].slice(26)))
     const borrowers = [...borrowersSet]
     
-    const pairInfo = await network.web3.eth.abi.decodeParameters(['address', 'address', 'address', 'bytes'], logParsed.data)
-    const collateral = await getToken(network, pairInfo[0])
-    const asset = await getToken(network, pairInfo[1])
-
-    const txsAll = borrowers.length > 0 ? await getAddrTransactions(network, address) : []
+    const [collateral, asset, txsAll] = await Promise.all([
+        getToken(network, pairInfo[0]),
+        getToken(network, pairInfo[1]),
+        borrowers.length > 0 ? getAddrTransactions(network, address) : Promise.resolve([])
+    ])
     const liquidateTxs = txsAll.filter(t => t.input?.startsWith(liquidateMethodId))
 
     const pairData: PairData = {
@@ -154,7 +157,9 @@ async function getPairData(network: Network, log: Log): Promise<PairData> {
         borrowers,
         liquidateTxs
     }
-    pairData.inSolventBorrowers = await getInSolventBorrowersBentoV1(network, pairData)
+    
+    const bento = new BentoBoxV1(network)
+    pairData.inSolventBorrowers = await getInSolventBorrowersBentoV1(network, bento, pairData)
 
     return pairData
 }
@@ -167,7 +172,7 @@ function numberPrecision(n: number, precision: number) {
     return Math.round(n*shift)/shift
 }
 
-async function getInSolventBorrowersBentoV1(network: Network, kashiPair: PairData): Promise<InSolventBorrower[]> {
+async function getInSolventBorrowersBentoV1(network: Network, bento: BentoBoxV1, kashiPair: PairData): Promise<InSolventBorrower[]> {
     console.log(
         `Checking pair ${kashiPair.collateral.symbol()} -> ${kashiPair.asset.symbol()} `
         + `(${kashiPair.borrowers.length} borrowers)`
@@ -181,7 +186,6 @@ async function getInSolventBorrowersBentoV1(network: Network, kashiPair: PairDat
         if (canBeLiquidated) inSolvent.push(b)         
     }))
     
-    const bento = new BentoBoxV1(network)
     const inSolventData = await getBorrowerInfo(network, bento, pair, kashiPair, inSolvent)
 
     const assetDecimals = kashiPair.asset.decimals()
