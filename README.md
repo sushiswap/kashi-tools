@@ -14,9 +14,20 @@
 - yarn
 
 ## Launching
-- Ethereum: yarn kashi-liquidation-statistics-ether
-- Kovan: yarn kashi-liquidation-statistics-kovan
-- Polygon: yarn kashi-liquidation-statistics-polygon
+yarn statistics \<network\> \<command\> \<args\>
+
+\<network\> - ether, polygon, kovan
+
+\<command\>:
+- insolvent  - show all insolvent borrowers
+- borrowers \<min coverage%\>  - show all borrowers with coverage more than \<min coverage %\>
+
+Examples: 
+- yarn statistics polygon borrowers 10
+- yarn statistics polygon insolvent   
+
+## Known Issues
+Alchemistry API failed to process many requests simultaniously. Plan to reduce its maximum quantity
 ## Licence
 
 UNLICENCED

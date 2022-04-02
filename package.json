@@ -10,11 +10,9 @@
   "scripts": {
     "prepublish": "tsc",
     "test": "jest",
-    "kashi-liquidation-statistics-ether": "tsc && node ./dist/findInsolventEther.js",
-    "kashi-liquidation-statistics-kovan": "tsc && node ./dist/findInsolventKovan.js",
-    "kashi-liquidation-statistics-polygon": "tsc && node ./dist/findInsolventPolygon.js",
+    "statistics": "tsc && node ./dist/stat.js",
     "testAlchemyAPI": "tsc && node ./dist/testAlchemyAPI.js",
-    "debug": "tsc && node --inspect-brk ./dist/findInsolventEther.js"
+    "debug": "tsc && node --inspect-brk ./dist/stat.js"
   },
   "lint-staged": {
     "**/*.ts": [
