@@ -27,7 +27,7 @@ interface PairData {
 const liquidateMethodId = '0x76ee101b'
 
 async function getPairData(network: Network, log: Log): Promise<PairData> {
-    const logParsed = await network.web3.eth.abi.decodeLog([{
+    const logParsed = network.web3.eth.abi.decodeLog([{
             type: 'string',
             name: 'LogName',
             indexed: true
@@ -47,14 +47,12 @@ async function getPairData(network: Network, log: Log): Promise<PairData> {
         log.topics
     );
     const address = logParsed.cloneAddress
+    const pairInfo = network.web3.eth.abi.decodeParameters(['address', 'address', 'address', 'bytes'], logParsed.data)
 
-    const [borrowLogs, pairInfo] = await Promise.all([
-        getLogs(network, {
-            address,
-            event: 'LogBorrow(address,address,uint256,uint256,uint256)'
-        }),
-        network.web3.eth.abi.decodeParameters(['address', 'address', 'address', 'bytes'], logParsed.data)
-    ])
+    const borrowLogs = await getLogs(network, {
+        address,
+        event: 'LogBorrow(address,address,uint256,uint256,uint256)'
+    })
     const borrowersSet = new Set<string>(borrowLogs.map(b => '0x' + b.topics[1].slice(26)))
     const borrowers = [...borrowersSet]
     
@@ -109,7 +107,8 @@ async function getInSolventBorrowersBentoV1(network: Network, bento: BentoBoxV1,
     const del = Math.pow(10, assetDecimals)
     inSolventData.forEach(b => {
         console.log(
-            `    Can be liquidated: user=${b.address}, coverage=${Math.round(b.coverage)}%, `
+            `Can be liquidated: user=${b.address}, pair=${kashiPair.collateral.symbol()}->${kashiPair.asset.symbol()}, `
+            + `coverage=${Math.round(b.coverage)}%, `
             + `borrowAmount=${numberPrecision(b.borrowAmount/del, 3)}${kashiPair.asset.symbol()}`
         );    
     })
@@ -130,7 +129,7 @@ async function getBorrowerInfo(
     
     const res: InSolventBorrower[] = await Promise.all(inSolvent.map(async b => {
         const [borrowPart, collateralShare] = await Promise.all([pair.userBorrowPart(b), pair.userCollateralShare(b)])
-        const collateralUsed = collateralShare.mul(E18)//open ? OPEN_COLLATERIZATION_RATE : CLOSED_COLLATERIZATION_RATE)
+        const collateralUsed = collateralShare.mul(E18)
         const collateralUsedAmount = await bento.toAmount(kashiPair.collateral.address(), collateralUsed)
         const borrowCostInCollateral = parseFloat(
             borrowPart.mul(totalBorrow.elastic).mul(exchangeRate).div(totalBorrow.base).toString()
@@ -160,10 +159,7 @@ export async function getAllKashiPairsBentoV1(network: Network): Promise<PairDat
         address1: network.kashPairMasterAddress
     })
 
-    const pairs = []
-    for (let i = 0; i < logs.length; ++i) {
-        pairs[i] = await getPairData(network, logs[i])
-    }
+    const pairs = await Promise.all(logs.map(l => getPairData(network, l)))
 
     let totalForLiquidation = 0
     let totalBorrowers = 0
