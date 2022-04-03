@@ -82,37 +82,42 @@ async function getBorrowerInfo(
 ): Promise<BorrowerInfo[]> {
     if (borrowers.length === 0) return []
 
-    const [totalBorrow, exchangeRate] = await Promise.all([pair.accruedTotalBorrow(), pair.updateExchangeRate()])
-    
-    const res: BorrowerInfo[] = await Promise.all(borrowers.map(async b => {
-        //const [borrowPart, collateralShare] = await Promise.all([pair.userBorrowPart(b), pair.userCollateralShare(b)])
-        const borrowPart = await pair.userBorrowPart(b)
-        const collateralShare = await pair.userCollateralShare(b)
-        const collateralUsed = collateralShare.mul(E18)
-        const collateralUsedAmount = await bento.toAmount(kashiPair.collateral.address(), collateralUsed)
-        const borrowCostInCollateral = totalBorrow.base.isZero() ? 0 : parseFloat(
-            borrowPart.mul(totalBorrow.elastic).mul(exchangeRate).div(totalBorrow.base).toString()
-        )
-        const borrowAmount = totalBorrow.base.isZero() ? 0 : parseFloat(
-            borrowPart.mul(totalBorrow.elastic).div(totalBorrow.base).toString()
-        )
-        const collateralAmount = parseFloat(collateralUsedAmount.toString())
+    try {
+        const [totalBorrow, exchangeRate] = await Promise.all([pair.accruedTotalBorrow(), pair.updateExchangeRate()])
+        
+        const res: BorrowerInfo[] = await Promise.all(borrowers.map(async b => {
+            //const [borrowPart, collateralShare] = await Promise.all([pair.userBorrowPart(b), pair.userCollateralShare(b)])
+            const borrowPart = await pair.userBorrowPart(b)
+            const collateralShare = await pair.userCollateralShare(b)
+            const collateralUsed = collateralShare.mul(E18)
+            const collateralUsedAmount = await bento.toAmount(kashiPair.collateral.address(), collateralUsed)
+            const borrowCostInCollateral = totalBorrow.base.isZero() ? 0 : parseFloat(
+                borrowPart.mul(totalBorrow.elastic).mul(exchangeRate).div(totalBorrow.base).toString()
+            )
+            const borrowAmount = totalBorrow.base.isZero() ? 0 : parseFloat(
+                borrowPart.mul(totalBorrow.elastic).div(totalBorrow.base).toString()
+            )
+            const collateralAmount = parseFloat(collateralUsedAmount.toString())
 
-        let coverage
-        if (collateralAmount === 0) {
-            coverage = borrowCostInCollateral > 0 ? Number.MAX_VALUE : 0
-        } else {
-            coverage = borrowCostInCollateral/collateralAmount*100
-        }
-        return {
-            address: b,
-            kashiPair,
-            borrowAmount,
-            coverage
-        }
-    }))
+            let coverage
+            if (collateralAmount === 0) {
+                coverage = borrowCostInCollateral > 0 ? Number.MAX_VALUE : 0
+            } else {
+                coverage = borrowCostInCollateral/collateralAmount*100
+            }
+            return {
+                address: b,
+                kashiPair,
+                borrowAmount,
+                coverage
+            }
+        }))
 
-    return res
+        return res
+    } catch(e) {
+        console.log(e);
+        return []
+    }
 }
 
 function numberPrecision(n: number, precision: number) {

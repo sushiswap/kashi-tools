@@ -151,8 +151,12 @@ export class KashiPair {
     }
 
     async updateExchangeRate(): Promise<BigNumber> {
-        const { _updated, rate} = await this._contractInstance.methods.updateExchangeRate().call()
-        return BigNumber.from(rate)
+        try {
+            const { _updated, rate} = await this._contractInstance.methods.updateExchangeRate().call()
+            return BigNumber.from(rate)
+        } catch (e) {
+            throw new Error(`KashiPair ${this._kashiPairAddress}: Error trying to updateExchangeRate`)
+        }
     }
     
 }
