@@ -1,6 +1,7 @@
 import { Network } from "./networks"
 import {AbiItem} from "web3-utils"
 import { wrapPermCache } from "./permanentCache"
+import { callMethod } from "./webAPI"
 
 export class Token {
     private _address: string
@@ -35,7 +36,7 @@ async function _getTokenSymbol(network: Network, token: string): Promise<string>
         type: "function",
     }]
     const contractInstance = new network.web3.eth.Contract(abi, token)
-    const result = await contractInstance.methods.symbol().call() as string
+    const result = await callMethod(network, contractInstance.methods.symbol()) as string
     return result
 }
 
@@ -52,7 +53,7 @@ async function _getTokenDecimals(network: Network, token: string): Promise<numbe
         type: "function",
     }]
     const contractInstance = new network.web3.eth.Contract(abi, token)
-    const result = await contractInstance.methods.decimals().call() as number
+    const result = await callMethod(network, contractInstance.methods.decimals()) as number
     return result
 }
 

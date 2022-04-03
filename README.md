@@ -27,7 +27,8 @@ Examples:
 - yarn statistics polygon insolvent   
 
 ## Known Issues
-Alchemistry API failed to process many requests simultaniously. Plan to reduce its maximum quantity
+Alchemistry API failed to process too many requests simultaniously. But exactly maximum quantity of requests per seconds
+varies significantly from time and region. If works instable - reduce web3Trottle first argument in networks.ts
 ## Licence
 
 UNLICENCED

@@ -3,6 +3,7 @@ import { Contract } from "web3-eth-contract"
 import { BigNumber } from "@ethersproject/bignumber";
 import { Network } from "./networks";
 import { Rebase } from "./Rebase";
+import { callAPI, callMethod } from "./webAPI";
 
 const kashiPairABI: AbiItem[] = [{
     inputs: [],
@@ -84,7 +85,7 @@ export class KashiPair {
 
     async totalBorrow(): Promise<Rebase> {
         if (this._totalBorrow === undefined) {
-            const totalBorrow = await this._contractInstance.methods.totalBorrow().call()
+            const totalBorrow = await callMethod(this._network, this._contractInstance.methods.totalBorrow())
             this._totalBorrow = new Rebase(totalBorrow)
         }
         return this._totalBorrow as Rebase
@@ -92,7 +93,7 @@ export class KashiPair {
 
     async userCollateralShare(user: string): Promise<BigNumber> {
         if (this._userCollateralShare[user] === undefined) {
-            const userCollateralShare = await this._contractInstance.methods.userCollateralShare(user).call()
+            const userCollateralShare = await callMethod(this._network, this._contractInstance.methods.userCollateralShare(user))
             this._userCollateralShare[user] =BigNumber.from(userCollateralShare)
         }
         return this._userCollateralShare[user]
@@ -100,7 +101,7 @@ export class KashiPair {
 
     async userBorrowPart(user: string): Promise<BigNumber> {
         if (this._userBorrowPart[user] === undefined) {
-            const userBorrowPart = await this._contractInstance.methods.userBorrowPart(user).call()
+            const userBorrowPart = await callMethod(this._network, this._contractInstance.methods.userBorrowPart(user))
             this._userBorrowPart[user] =BigNumber.from(userBorrowPart)
         }
         return this._userBorrowPart[user]
@@ -108,7 +109,7 @@ export class KashiPair {
 
     async canBeLiquidated(borrower: string): Promise<boolean> {
         try {
-            await this._contractInstance.methods.liquidate(
+            await callAPI(this._network, () => this._contractInstance.methods.liquidate(
                 [borrower], 
                 [34444], 
                 '0x0000000000000000000000000000000000000001',
@@ -116,33 +117,21 @@ export class KashiPair {
                 true
             ).call({
                 from: this._kashiPairAddress
-            })
+            }))
         } catch(e) {
             return false
         }
         return true
     }
 
-    async _accruedTotalBorrow(): Promise<Rebase> {
-        const totalBorrow = await this.totalBorrow()
-        const accrueInfo = await this._contractInstance.methods.accrueInfo().call()
-        accrueInfo.interestPerSecond = BigNumber.from(accrueInfo.interestPerSecond)
-        const blockNumber = await this._network.web3.eth.getBlockNumber()
-        const timeStamp = (await this._network.web3.eth.getBlock(blockNumber)).timestamp as number
-        const elapsedTime = timeStamp - accrueInfo.lastAccrued
-        const extraAmount = totalBorrow.elastic.mul(accrueInfo.interestPerSecond).mul(elapsedTime).div(E18);
-        totalBorrow.elastic = totalBorrow.elastic.add(extraAmount);
-        return totalBorrow
-    }
-
     // TODO: calc timeStamp in advance to make it faster ?
     async accruedTotalBorrow(): Promise<Rebase> {
         const [totalBorrow, accrueInfo, blockNumber] = await Promise.all([
             this.totalBorrow(),
-            this._contractInstance.methods.accrueInfo().call(),
-            this._network.web3.eth.getBlockNumber()
+            callMethod(this._network, this._contractInstance.methods.accrueInfo()),
+            callAPI(this._network, this._network.web3.eth.getBlockNumber)
         ])
-        const timeStamp = (await this._network.web3.eth.getBlock(blockNumber)).timestamp as number
+        const timeStamp = (await callAPI(this._network, () => this._network.web3.eth.getBlock(blockNumber))).timestamp as number
         const elapsedTime = timeStamp - accrueInfo.lastAccrued
         accrueInfo.interestPerSecond = BigNumber.from(accrueInfo.interestPerSecond)
         const extraAmount = totalBorrow.elastic.mul(accrueInfo.interestPerSecond).mul(elapsedTime).div(E18);
@@ -152,7 +141,7 @@ export class KashiPair {
 
     async updateExchangeRate(): Promise<BigNumber> {
         try {
-            const { _updated, rate} = await this._contractInstance.methods.updateExchangeRate().call()
+            const { _updated, rate} = await callMethod(this._network, this._contractInstance.methods.updateExchangeRate())
             return BigNumber.from(rate)
         } catch (e) {
             throw new Error(`KashiPair ${this._kashiPairAddress}: Error trying to updateExchangeRate`)

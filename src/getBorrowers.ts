@@ -1,4 +1,4 @@
-import {Network} from './networks'
+import { Network } from './networks'
 import { BigNumber } from '@ethersproject/bignumber'
 import { getToken, Token } from './token'
 import { BentoBoxV1 } from './BentoBoxV1'
@@ -21,7 +21,7 @@ interface BorrowerInfo {
 }
 
 async function getPairBorrowers(network: Network, log: Log): Promise<BorrowerInfo[]> {
-    const logParsed = await network.web3.eth.abi.decodeLog([{
+    const logParsed = network.web3.eth.abi.decodeLog([{
             type: 'string',
             name: 'LogName',
             indexed: true
@@ -39,16 +39,14 @@ async function getPairBorrowers(network: Network, log: Log): Promise<BorrowerInf
         }],
         log.data,
         log.topics
-    );
+    )
     const address = logParsed.cloneAddress
+    const pairInfo = network.web3.eth.abi.decodeParameters(['address', 'address', 'address', 'bytes'], logParsed.data)
 
-    const [borrowLogs, pairInfo] = await Promise.all([
-        getLogs(network, {
-            address,
-            event: 'LogBorrow(address,address,uint256,uint256,uint256)'
-        }),
-        network.web3.eth.abi.decodeParameters(['address', 'address', 'address', 'bytes'], logParsed.data)
-    ])
+    const borrowLogs = await getLogs(network, {
+        address,
+        event: 'LogBorrow(address,address,uint256,uint256,uint256)'
+    })
     const borrowersSet = new Set<string>(borrowLogs.map(b => '0x' + b.topics[1].slice(26)))
     const borrowers = [...borrowersSet]
     
@@ -86,9 +84,7 @@ async function getBorrowerInfo(
         const [totalBorrow, exchangeRate] = await Promise.all([pair.accruedTotalBorrow(), pair.updateExchangeRate()])
         
         const res: BorrowerInfo[] = await Promise.all(borrowers.map(async b => {
-            //const [borrowPart, collateralShare] = await Promise.all([pair.userBorrowPart(b), pair.userCollateralShare(b)])
-            const borrowPart = await pair.userBorrowPart(b)
-            const collateralShare = await pair.userCollateralShare(b)
+            const [borrowPart, collateralShare] = await Promise.all([pair.userBorrowPart(b), pair.userCollateralShare(b)])
             const collateralUsed = collateralShare.mul(E18)
             const collateralUsedAmount = await bento.toAmount(kashiPair.collateral.address(), collateralUsed)
             const borrowCostInCollateral = totalBorrow.base.isZero() ? 0 : parseFloat(
@@ -136,9 +132,8 @@ export async function getBorrowers(network: Network, minCoverage = 50): Promise<
     })
 
     let borrowers: BorrowerInfo[] = []
-    for (let i = 0; i < logs.length; ++i) {
-        borrowers = borrowers.concat(await getPairBorrowers(network, logs[i]))
-    }
+    const b = await Promise.all(logs.map(l => getPairBorrowers(network, l)))
+    b.forEach(s => borrowers = borrowers.concat(s))
 
     const borrowersFiltered = borrowers.filter(b => b.coverage >= minCoverage)
     const borrowersSorted = borrowersFiltered.sort((a, b) => b.coverage - a.coverage)

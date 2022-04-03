@@ -6,7 +6,8 @@ export const networks = {
         name: 'Ethereum',
         ticker: 'E',
         coinName: 'ETH',
-        web3: createAlchemyWeb3(`https://eth-mainnet.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`),
+        web3: createAlchemyWeb3(`https://eth-mainnet.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`),        
+        web3Trottle: getTrottle(300, 1000),     // no more than 300 request per 1 second
         scanAPIURL: 'https://api.etherscan.io',
         scanAPIKey: process.env.ETHERSCAN_API_KEY,
         trottle: getTrottle(4, 1100),     // no more than 4 request per 1.1 second
@@ -18,6 +19,7 @@ export const networks = {
         ticker: 'K',
         coinName: 'ETH',
         web3: createAlchemyWeb3(`https://eth-kovan.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`),
+        web3Trottle: getTrottle(300, 1000),     // no more than 300 request per 1 second
         scanAPIURL: 'https://api-kovan.etherscan.io',
         scanAPIKey: process.env.ETHERSCAN_API_KEY,
         trottle: getTrottle(4, 1100),     // no more than 4 request per 1.1 second
@@ -29,6 +31,7 @@ export const networks = {
         ticker: 'P',
         coinName: 'MATIC',
         web3: createAlchemyWeb3(`https://polygon-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`),
+        web3Trottle: getTrottle(300, 1000),     // no more than 300 request per 1 second
         scanAPIURL: 'https://api.polygonscan.com',
         scanAPIKey: process.env.POLYGONSCAN_API_KEY,
         trottle: getTrottle(4, 1100),     // no more than 4 request per 1.1 second
