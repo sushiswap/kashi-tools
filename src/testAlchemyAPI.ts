@@ -1,117 +1,129 @@
-import { Network, networks } from "./networks"
-import {AbiItem} from "web3-utils"
+import { Network, networks } from './networks'
+import { AbiItem } from 'web3-utils'
 
 interface PairData {
-    address: string;
-    collateral: string;
-    collateralSymbol: string;
-    asset: string;
-    assetSymbol: string;
-    oracle: string;
-    //oracleData: string;
-    borrowers: string[];
+  address: string
+  collateral: string
+  collateralSymbol: string
+  asset: string
+  assetSymbol: string
+  oracle: string
+  //oracleData: string;
+  borrowers: string[]
 }
 
-
-const kashiPairABI: AbiItem[] = [{
+const kashiPairABI: AbiItem[] = [
+  {
     inputs: [],
-    name: "exchangeRate",
-    outputs: [{internalType: 'uint256', name: '', type: 'uint256'}],
-    stateMutability: "view",
-    type: "function"
-}, {
+    name: 'exchangeRate',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
     inputs: [],
-    name: "totalBorrow",
+    name: 'totalBorrow',
     outputs: [
-        {internalType: 'uint128', name: 'elastic', type: 'uint128'},
-        {internalType: 'uint128', name: 'base', type: 'uint128'}
+      { internalType: 'uint128', name: 'elastic', type: 'uint128' },
+      { internalType: 'uint128', name: 'base', type: 'uint128' },
     ],
-    stateMutability: "view",
-    type: "function"
-}, {
-    inputs: [{internalType: 'address', name: '', type: 'address'}],
-    name: "userCollateralShare",
-    outputs: [{internalType: 'uint256', name: '', type: 'uint256'}],
-    stateMutability: "view",
-    type: "function"
-}, {
-    inputs: [{internalType: 'address', name: '', type: 'address'}],
-    name: "userBorrowPart",
-    outputs: [{internalType: 'uint256', name: '', type: 'uint256'}],
-    stateMutability: "view",
-    type: "function"
-}, {
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: '', type: 'address' }],
+    name: 'userCollateralShare',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: '', type: 'address' }],
+    name: 'userBorrowPart',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
     inputs: [],
-    name: "updateExchangeRate",
+    name: 'updateExchangeRate',
     outputs: [
-        {internalType: 'bool', name: 'updated', type: 'bool'},
-        {internalType: 'uint256', name: 'rate', type: 'uint256'}
+      { internalType: 'bool', name: 'updated', type: 'bool' },
+      { internalType: 'uint256', name: 'rate', type: 'uint256' },
     ],
-    stateMutability: "nonpayable",
-    type: "function"
-}, {
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
     inputs: [
-        {internalType: 'address[]', name: 'users', type: 'address[]'},
-        {internalType: 'uint256[]', name: 'maxBorrowParts', type: 'uint256[]'},
-        {internalType: 'address', name: 'to', type: 'address'},
-        {internalType: 'contract ISwapper', name: 'swapper', type: 'address'},
-        {internalType: 'bool', name: 'open', type: 'bool'},
+      { internalType: 'address[]', name: 'users', type: 'address[]' },
+      { internalType: 'uint256[]', name: 'maxBorrowParts', type: 'uint256[]' },
+      { internalType: 'address', name: 'to', type: 'address' },
+      { internalType: 'contract ISwapper', name: 'swapper', type: 'address' },
+      { internalType: 'bool', name: 'open', type: 'bool' },
     ],
-    name: "liquidate",
+    name: 'liquidate',
     outputs: [],
-    stateMutability: "nonpayable",
-    type: "function"
-}, {
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
     inputs: [],
-    name: "accrueInfo",
+    name: 'accrueInfo',
     outputs: [
-        {internalType: 'uint64', name: 'interestPerSecond', type: 'uint64'},
-        {internalType: 'uint64', name: 'lastAccrued', type: 'uint64'},
-        {internalType: 'uint128', name: 'feesEarnedFraction', type: 'uint128'},
+      { internalType: 'uint64', name: 'interestPerSecond', type: 'uint64' },
+      { internalType: 'uint64', name: 'lastAccrued', type: 'uint64' },
+      { internalType: 'uint128', name: 'feesEarnedFraction', type: 'uint128' },
     ],
-    stateMutability: "view",
-    type: "function",
-}]
+    stateMutability: 'view',
+    type: 'function',
+  },
+]
 
 async function testLiquidation(network: Network, kashiPair: string, borrowers: string[]) {
-    if (borrowers.length === 0) return []
-    const kashiPaircontractInstance = new network.web3.eth.Contract(kashiPairABI, kashiPair)
-    //const inSolvent = []
-    // for (let i = 0; i < borrowers.length; ++i) {
-    borrowers = borrowers.concat(borrowers)
-    borrowers = borrowers.concat(borrowers)
-    borrowers = borrowers.concat(borrowers)
-    //borrowers = borrowers.concat(borrowers)
-    //borrowers = borrowers.concat(borrowers)
-    console.log(borrowers.length);
-    
-    const inSolvent = await Promise.all(borrowers.map(async b => {
-        try {
-            await kashiPaircontractInstance.methods.liquidate(
-                [b], 
-                [34444], 
-                '0x0000000000000000000000000000000000000001',
-                '0x0000000000000000000000000000000000000000',
-                true
-            ).call({
-                from: kashiPair
-            })
-        } catch(e) {
-            return false
-        }
-        return true
-    }))
-    // const inSolventData = await getBorrowerInfo(network, kashiPair, inSolvent)
-    return inSolvent
+  if (borrowers.length === 0) return []
+  const kashiPaircontractInstance = new network.web3.eth.Contract(kashiPairABI, kashiPair)
+  //const inSolvent = []
+  // for (let i = 0; i < borrowers.length; ++i) {
+  borrowers = borrowers.concat(borrowers)
+  borrowers = borrowers.concat(borrowers)
+  borrowers = borrowers.concat(borrowers)
+  //borrowers = borrowers.concat(borrowers)
+  //borrowers = borrowers.concat(borrowers)
+  console.log(borrowers.length)
+
+  const inSolvent = await Promise.all(
+    borrowers.map(async (b) => {
+      try {
+        await kashiPaircontractInstance.methods
+          .liquidate(
+            [b],
+            [34444],
+            '0x0000000000000000000000000000000000000001',
+            '0x0000000000000000000000000000000000000000',
+            true
+          )
+          .call({
+            from: kashiPair,
+          })
+      } catch (e) {
+        return false
+      }
+      return true
+    })
+  )
+  // const inSolventData = await getBorrowerInfo(network, kashiPair, inSolvent)
+  return inSolvent
 }
 
 async function test1() {
-    const t = []
-    for (let i = 0; i < 500; ++i) t.push(i)
-    await Promise.all(t.map(async n => {
-        console.log(n);
-        
-        await testLiquidation(networks.Ethereum, '0x3485A7C8913d640245e38564DDC05Bfb40104635', [   
+  const t = []
+  for (let i = 0; i < 500; ++i) t.push(i)
+  await Promise.all(
+    t.map(async (n) => {
+      console.log(n)
+
+      await testLiquidation(networks.Ethereum, '0x3485A7C8913d640245e38564DDC05Bfb40104635', [
         '0x4bb4c1b0745ef7b4642feeccd0740dec417ca0a0',
         '0xc4f88c35bd1485c846847c093b5a77a126cf1b05',
         '0x39979745b166572c25b4c7e4e0939c9298efe79d',
@@ -144,8 +156,10 @@ async function test1() {
         '0x8de0cbb5ac966d3e5718221bc25e1fc2bd059e60',
         '0xc8e206c0fb4c1c17b8c53ec4aa8f049228eb6b16',
         '0x69c7858b9477d8680ce60be1cf36930a0cdd8a58',
-        '0xd30ad1986bfefe85264af30e28704ce4f803a67e'
-    ])}))
+        '0xd30ad1986bfefe85264af30e28704ce4f803a67e',
+      ])
+    })
+  )
 }
 
 test1()
