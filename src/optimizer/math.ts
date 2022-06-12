@@ -1,7 +1,7 @@
 import { BigNumber } from "@ethersproject/bignumber"
 
-const MAX_GAS_SHARE = 0.005
-const MIN_SIGNIFICANT_UTILIZATION = 0.0025
+export const MAX_GAS_SHARE = 0.005
+export const MIN_SIGNIFICANT_UTILIZATION = 0.0025
 
 export interface Rebase {
     base: BigNumber
@@ -32,7 +32,7 @@ function getSortOrder<T>(a: T[], cmp: (x:T, y:T)=>number): number[] {
 }
 
 const clamp = (num: number, min: number, max: number) => Math.min(Math.max(num, min), max);
-const closeValues = (a: number, b: number) => Math.abs(a/b-1) < 1e-12
+const closeValues = (a: number, b: number) => b < 10 ? a == b : Math.abs(a/b-1) < 1e-12
 
 function sharesToAmount(shares: BigNumber, total: Rebase): number {
     const amount = shares.mul(total.elastic).div(total.base)
@@ -113,14 +113,14 @@ function addLiquidityStable(
     const utilizations = pairs.map(p => p.lended == 0 ? 0 : p.borrowed/p.lended)
     utilizations.push(MIN_SIGNIFICANT_UTILIZATION)
     const order = getSortOrder(utilizations, (a, b) => b-a)
-
+    
     let lendAcc = 0
     let borrowAcc = 0
     let distrAcc = 0
     const distr: number[] = []
     for (let i = 0; i < maxPairs; ++i) {
         if (assetAmount <= 0) break
-        const utilNext = utilizations[i+1]
+        const utilNext = utilizations[order[i+1]]
         if (utilNext < MIN_SIGNIFICANT_UTILIZATION) break
         const {lended, borrowed} = pairs[order[i]]
         lendAcc += lended
@@ -133,21 +133,26 @@ function addLiquidityStable(
         }
         distrAcc += distrAmount
         assetAmount -= distrAmount
-    }
+    }    
     { // check - to comment off for production
-        console.assert(closeValues(distr.reduce((a,b) => a+b, 0), assetAmount + distrAcc))
-        const utilFinal = pairs[order[0]].borrowed/(pairs[order[0]].lended + distr[0])
-        for (let i = 1; i < distr.length; ++i) {
-            console.assert(closeValues(pairs[order[i]].borrowed/(pairs[order[i]].lended + distr[i]), utilFinal))
+        console.assert(closeValues(distr.reduce((a,b) => a+b, 0), distrAcc))
+        if (distr.length > 0) {
+            const utilFinal = pairs[order[0]].borrowed/(pairs[order[0]].lended + distr[0])
+            for (let i = 1; i < distr.length; ++i) {
+                console.assert(closeValues(pairs[order[i]].borrowed/(pairs[order[i]].lended + distr[i]), utilFinal))
+            }
         }
     }
-    if (assetAmount > 0) {
-        const part = assetAmount/pairs.length
-        for (let i = 0; i < pairs.length; ++i) {
-            distr[i] += part
+
+    const rest = assetAmount/maxPairs
+    if (rest > 0) 
+        for (let i = 0, j = 0; j < maxPairs; ++i) {
+            if (order[i] < pairs.length) {
+                res.set(pairs[order[i]].address, rest)
+                ++j
+            }
         }
-    }
-    distr.forEach((d, i) => res.set(pairs[order[i]].address, d))
+    distr.forEach((d, i) => res.set(pairs[order[i]].address, d + rest))
     return res
 }
 
