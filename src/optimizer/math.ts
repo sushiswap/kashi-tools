@@ -112,7 +112,7 @@ function addLiquidityStable(
     const maxPairs = clamp(Math.round(assetAmount*MAX_GAS_SHARE/depositCost), 1, pairs.length)
     const utilizations = pairs.map(p => p.lended == 0 ? 0 : p.borrowed/p.lended)
     utilizations.push(MIN_SIGNIFICANT_UTILIZATION)
-    const order = getSortOrder(utilizations, (a, b) => a-b)
+    const order = getSortOrder(utilizations, (a, b) => b-a)
 
     let lendAcc = 0
     let borrowAcc = 0
@@ -127,6 +127,7 @@ function addLiquidityStable(
         borrowAcc += borrowed
         const distrAmount = clamp(borrowAcc/utilNext - lendAcc, 0, assetAmount)
         console.assert( (borrowAcc/utilNext - lendAcc) >= -1e-12)
+        distr[i] = 0
         for (let j = 0; j <= i; ++j) {
             distr[j] += pairs[order[j]].borrowed*distrAmount/borrowAcc
         }
