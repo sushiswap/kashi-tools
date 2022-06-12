@@ -10,6 +10,7 @@
   "scripts": {
     "prepublish": "tsc",
     "test": "jest",
+    "testDebug": "node --inspect-brk ./node_modules/jest/bin/jest.js --runInBand",
     "statistics": "tsc && node ./dist/stat.js",
     "testAlchemyAPI": "tsc && node ./dist/testAlchemyAPI.js",
     "debug": "tsc && node --inspect-brk ./dist/stat.js"
