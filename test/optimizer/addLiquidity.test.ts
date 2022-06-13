@@ -1,5 +1,5 @@
 import { BigNumber } from "@ethersproject/bignumber"
-import {addLiquidity, KashiPair, Rebase, Distribution, MIN_SIGNIFICANT_UTILIZATION, MAX_GAS_SHARE} from '../../src/optimizer/math'
+import {addAsset, KashiPair, Rebase, Distribution, MIN_SIGNIFICANT_UTILIZATION, MAX_GAS_SHARE} from '../../src/optimizer/math'
 
 const closeValues = (a: number, b: number, threshould = 1e-12) => Math.abs(a/b-1) < threshould
 
@@ -9,7 +9,7 @@ function checkStableDistribution(
     bentoAssetTotal: Rebase,
     pairDepositCostInAssetAmount: number,
 ): Distribution {
-    const distr = addLiquidity(
+    const distr = addAsset(
         assetShares,
         pairs,
         bentoAssetTotal,
@@ -37,8 +37,7 @@ function checkStableDistribution(
         const addedShared = distr.get(p.address) || BigNumber.from(0)
         const added = addedShared.mul(bentoAssetTotal.elastic).div(bentoAssetTotal.base)        
         const borrowed = parseFloat(p.totalBorrow.elastic.toString())
-        const lended = parseFloat(p.totalAsset.elastic.mul(bentoAssetTotal.elastic).div(bentoAssetTotal.base).toString())
-        expect(borrowed/lended).toBeLessThanOrEqual(1)
+        const lended = parseFloat(p.totalAsset.elastic.mul(bentoAssetTotal.elastic).div(bentoAssetTotal.base).toString()) + borrowed
         utilAfter[i] = borrowed/(lended+parseFloat(added.toString()))
         used[i] = added.gt(0)        
         if (used[i] && utilAfter[i] < utilAfterMin) utilAfterMin = utilAfter[i]

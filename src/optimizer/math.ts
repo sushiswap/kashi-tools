@@ -58,10 +58,12 @@ export function getBigNumber(
 }
 
 function kashiPairToAmounts(pair: KashiPair, total: Rebase): KashiPairAmounts {
+    const borrowed = parseFloat(pair.totalBorrow.elastic.toString())
+    const lended = sharesToAmount(pair.totalAsset.elastic, total) + borrowed
     return {
         address: pair.address,
-        lended: sharesToAmount(pair.totalAsset.elastic, total),
-        borrowed: parseFloat(pair.totalBorrow.elastic.toString()),
+        lended,
+        borrowed,
         interestPerSecond: parseFloat(pair.interestPerSecond.toString())
     }
 }
@@ -97,7 +99,7 @@ function distributionInternalToDistribution(distr: DistributionInternal, total: 
     return res
 }
 
-function addLiquidityStable(
+function addAssetStable(
     assetAmount: number,
     pairs: KashiPairAmounts[],
     depositCost: number
@@ -160,8 +162,30 @@ function addLiquidityStable(
     return res
 }
 
+/*class KashiPairData {
+    lendedNow: number
+    borrowedNow: number
+    ownInitial: number
+    ownNow: number
 
-function removeLiquidityStable(
+    constructor(pair: KashiPairAmounts, ownInitial: number) {
+        this.lendedNow = pair.lended
+        this.borrowedNow = pair.borrowed
+        this.ownInitial = ownInitial
+        this.ownNow = ownInitial
+    }
+
+    utilization() {
+        return this.borrowedNow/this.lendedNow
+    }
+
+    removeLiquidity(amout: number): number {
+        const removed = Math.min()
+    }
+}
+
+// Assumption: each pair from ownLiquidity MUST be in pairs array
+function removeAssetStable(
     assetAmount: number,
     pairs: KashiPairAmounts[],
     ownLiquidity: DistributionInternal,
@@ -174,7 +198,7 @@ function removeLiquidityStable(
         return res
     }
 
-    const maxPairs = clamp(Math.round(assetAmount*MAX_GAS_SHARE/withdrawCost), 1, pairs.length)
+    const maxPairs = clamp(Math.round(assetAmount*MAX_GAS_SHARE/withdrawCost), 1, ownLiquidity.size)
     const utilizations: [number, number][] = pairs.map(p => [p.lended == 0 ? 0 : p.borrowed/p.lended, p.lended])
     // order: lesser utilization first, if utilizations are equal - more lended first
     const order = getSortOrder(utilizations, ([u1, l1], [u2, l2]) => u1 == u2 ? l2 - l1 : u1-u2)
@@ -210,15 +234,15 @@ function removeLiquidityStable(
 
     distr.forEach((d, i) => res.set(pairs[order[i]].address, d))
     return res
-}
+}*/
 
-export function addLiquidity(
+export function addAsset(
     assetShares: BigNumber,
     pairs: KashiPair[],
     bentoAssetTotal: Rebase,
     pairDepositCostInAssetAmount: number
 ): Distribution {
-    const distr = addLiquidityStable(
+    const distr = addAssetStable(
         sharesToAmount(assetShares, bentoAssetTotal), 
         pairs.map(p => kashiPairToAmounts(p, bentoAssetTotal)), 
         pairDepositCostInAssetAmount
@@ -226,7 +250,7 @@ export function addLiquidity(
     return distributionInternalToDistribution(distr, bentoAssetTotal, assetShares)
 }
 
-// export function removeLiquidity(
+// export function removeAsset(
 //     assetShares: BigNumber,
 //     pairs: KashiPair[], 
 //     optimizerLiquidity: Distribution, 
