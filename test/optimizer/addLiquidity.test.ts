@@ -52,9 +52,9 @@ function checkStableDistribution(
     } else {
         expect(distr.size).toBeLessThanOrEqual(pairs.length)
         const assetAmount = parseFloat(assetShares.mul(bentoAssetTotal.elastic).div(bentoAssetTotal.base).toString())
-        const maxPairs = Math.max(Math.round(assetAmount*MAX_GAS_SHARE/pairDepositCostInAssetAmount), 1)
-        for(let i = 0; i < pairs.length; ++i) {            
-            if (used[i]) expect(closeValues(utilAfter[i], utilAfterMin, 1e-5)).toBeTruthy()
+        const maxPairs = Math.max(Math.round(assetAmount*MAX_GAS_SHARE/pairDepositCostInAssetAmount), 1)        
+        for(let i = 0; i < pairs.length; ++i) { 
+            if (used[i]) expect(closeValues(utilAfter[i], utilAfterMin, 1e-6)).toBeTruthy()
             else if (distr.size !== maxPairs) expect(utilAfter[i] as number).toBeLessThan(utilAfterMin)
         }
     }
@@ -164,7 +164,7 @@ describe('Optimizer: Add Liquidity', () => {
     })
 
     it('2 different pairs', () => {
-        const inputShares = 1_934_567
+        const inputShares = 12_934_567
         const res = checkStableDistribution(
             BigNumber.from(inputShares),
             [{
@@ -181,7 +181,34 @@ describe('Optimizer: Add Liquidity', () => {
             {base: BigNumber.from(2_100_931), elastic: BigNumber.from(1_050_874)},
             100
         )
-        expect(res.size).toBeGreaterThan(0)
+        expect(res.size).toBe(2)
+    })
+
+    
+    it('3 different pairs', () => {
+        const inputShares = 33_934_567
+        const res = checkStableDistribution(
+            BigNumber.from(inputShares),
+            [{
+                address: 'KashiPairAddress0',
+                totalAsset: {base: BigNumber.from(2_100_643), elastic: BigNumber.from(2_050_874)},
+                totalBorrow: {base: BigNumber.from(500_432), elastic: BigNumber.from(560_000)},
+                interestPerSecond: BigNumber.from(10)
+            }, {
+                address: 'KashiPairAddress1',
+                totalAsset: {base: BigNumber.from(4_100_643), elastic: BigNumber.from(5_050_874)},
+                totalBorrow: {base: BigNumber.from(540_432), elastic: BigNumber.from(590_011)},
+                interestPerSecond: BigNumber.from(10)
+            }, {
+                address: 'KashiPairAddress2',
+                totalAsset: {base: BigNumber.from(5_100_643), elastic: BigNumber.from(6_050_874)},
+                totalBorrow: {base: BigNumber.from(600_432), elastic: BigNumber.from(660_000)},
+                interestPerSecond: BigNumber.from(10)
+            }],
+            {base: BigNumber.from(700_931), elastic: BigNumber.from(1_050_874)},
+            10
+        )
+        expect(res.size).toBe(3)
     })
 
     it('2 empty pairs', () => {

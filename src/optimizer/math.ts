@@ -32,7 +32,7 @@ function getSortOrder<T>(a: T[], cmp: (x:T, y:T)=>number): number[] {
 }
 
 const clamp = (num: number, min: number, max: number) => Math.min(Math.max(num, min), max);
-const closeValues = (a: number, b: number) => b < 10 ? a == b : Math.abs(a/b-1) < 1e-12
+const closeValues = (a: number, b: number) => /*b < 10 ? a == b :*/ Math.abs(a/b-1) < 1e-12
 
 function sharesToAmount(shares: BigNumber, total: Rebase): number {
     const amount = shares.mul(total.elastic).div(total.base)
@@ -131,11 +131,14 @@ function addLiquidityStable(
         for (let j = 0; j <= i; ++j) {
             distr[j] += pairs[order[j]].borrowed*distrAmount/borrowAcc
         }
+        lendAcc += distrAmount
         distrAcc += distrAmount
         assetAmount -= distrAmount
+        if (assetAmount > 0) console.assert(closeValues(borrowAcc/lendAcc, utilNext))
     }    
     { // check - to comment off for production
-        console.assert(closeValues(distr.reduce((a,b) => a+b, 0), distrAcc))
+        const distributed = distr.reduce((a,b) => a+b, 0)
+        console.assert(Math.abs(distributed-distrAcc) < 10 || closeValues(distributed, distrAcc))
         if (distr.length > 0) {
             const utilFinal = pairs[order[0]].borrowed/(pairs[order[0]].lended + distr[0])
             for (let i = 1; i < distr.length; ++i) {
@@ -152,7 +155,60 @@ function addLiquidityStable(
                 ++j
             }
         }
+
     distr.forEach((d, i) => res.set(pairs[order[i]].address, d + rest))
+    return res
+}
+
+
+function removeLiquidityStable(
+    assetAmount: number,
+    pairs: KashiPairAmounts[],
+    ownLiquidity: DistributionInternal,
+    withdrawCost: number
+): DistributionInternal {
+    const res = new Map<string, number>()
+    if (pairs.length == 0 || assetAmount <= 0) return res
+    if (pairs.length == 1) {
+        res.set(pairs[0].address, assetAmount)
+        return res
+    }
+
+    const maxPairs = clamp(Math.round(assetAmount*MAX_GAS_SHARE/withdrawCost), 1, pairs.length)
+    const utilizations: [number, number][] = pairs.map(p => [p.lended == 0 ? 0 : p.borrowed/p.lended, p.lended])
+    // order: lesser utilization first, if utilizations are equal - more lended first
+    const order = getSortOrder(utilizations, ([u1, l1], [u2, l2]) => u1 == u2 ? l2 - l1 : u1-u2)
+    
+    let lendAcc = 0
+    let borrowAcc = 0
+    let distrAcc = 0
+    const distr: number[] = []
+    for (let i = 0; i < maxPairs; ++i) {
+        if (assetAmount <= 0) break
+        const utilNext = utilizations[order[i+1]][0]
+        const {lended, borrowed} = pairs[order[i]]
+        lendAcc += lended
+        borrowAcc += borrowed
+        const distrAmount = clamp(borrowAcc/utilNext - lendAcc, 0, assetAmount)
+        console.assert( (borrowAcc/utilNext - lendAcc) >= -1e-12)
+        distr[i] = 0
+        for (let j = 0; j <= i; ++j) {
+            distr[j] += pairs[order[j]].borrowed*distrAmount/borrowAcc
+        }
+        distrAcc += distrAmount
+        assetAmount -= distrAmount
+    }    
+    { // check - to comment off for production
+        console.assert(closeValues(distr.reduce((a,b) => a+b, 0), distrAcc))
+        if (distr.length > 0) {
+            const utilFinal = pairs[order[0]].borrowed/(pairs[order[0]].lended + distr[0])
+            for (let i = 1; i < distr.length; ++i) {
+                console.assert(closeValues(pairs[order[i]].borrowed/(pairs[order[i]].lended + distr[i]), utilFinal))
+            }
+        }
+    }
+
+    distr.forEach((d, i) => res.set(pairs[order[i]].address, d))
     return res
 }
 
